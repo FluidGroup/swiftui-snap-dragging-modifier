@@ -13,7 +13,7 @@ public struct SnapDraggingModifier: ViewModifier {
       /// entire view
       case screen
       ///
-      case edgeLeading
+      case edge(Edge.Set)
     }
 
     public let minimumDistance: Double
@@ -165,16 +165,54 @@ public struct SnapDraggingModifier: ViewModifier {
     switch activation.regionToActivate {
     case .screen:
       return true
-    case .edgeLeading:
-      switch layoutDirection {
-      case .leftToRight:
-        return CGRect(origin: .zero, size: .init(width: 20, height: CGFloat.greatestFiniteMagnitude)).contains(startLocation)
-      case .rightToLeft:
-        // FIXME: Unimplemented
-        return CGRect(origin: .zero, size: .init(width: 20, height: CGFloat.greatestFiniteMagnitude)).contains(startLocation)
-      @unknown default:
-        return false
+    case .edge(let edge):
+
+      let space: Double = 20
+      let contentSize = self.contentSize
+
+      if edge.contains(.leading) {
+        switch layoutDirection {
+        case .leftToRight:
+          if CGRect(origin: .zero, size: .init(width: space, height: contentSize.height)).contains(startLocation) {
+            return true
+          }
+        case .rightToLeft:
+          if CGRect(origin: .init(x: contentSize.width - space, y: 0), size: .init(width: space, height: contentSize.height)).contains(startLocation) {
+            return true
+          }
+        @unknown default:
+          break
+        }
       }
+
+      if edge.contains(.trailing) {
+        switch layoutDirection {
+        case .leftToRight:
+          if CGRect(origin: .init(x: contentSize.width - space, y: 0), size: .init(width: space, height: contentSize.height)).contains(startLocation) {
+            return true
+          }
+        case .rightToLeft:
+          if CGRect(origin: .zero, size: .init(width: 20, height: CGFloat.greatestFiniteMagnitude)).contains(startLocation) {
+            return true
+          }
+        @unknown default:
+          return false
+        }
+      }
+
+      if edge.contains(.top) {
+        if CGRect(origin: .zero, size: .init(width: contentSize.width, height: space)).contains(startLocation) {
+          return true
+        }
+      }
+
+      if edge.contains(.bottom) {
+        if CGRect(origin: .init(x: 0, y: contentSize.height - space), size: .init(width: contentSize.width, height: space)).contains(startLocation) {
+          return true
+        }
+      }
+
+      return false
     }
 
   }
