@@ -5,23 +5,28 @@ import PackageDescription
 
 let package = Package(
   name: "swiftui-snap-dragging-modifier",
-  platforms: [.iOS(.v13)],
+  platforms: [.iOS(.v14)],
   products: [
-    // Products define the executables and libraries a package produces, making them visible to other packages.
     .library(
-      name: "SnapDraggingModifier",
-      targets: ["SnapDraggingModifier"]
+      name: "SwiftUISnapDraggingModifier",
+      targets: ["SwiftUISnapDraggingModifier"]
     )
   ],
+  dependencies: [
+    .package(url: "https://github.com/FluidGroup/swiftui-gesture-velocity", from: "1.0.0"),
+    .package(url: "https://github.com/FluidGroup/swiftui-support", from: "0.4.0")
+  ],
   targets: [
-    // Targets are the basic building blocks of a package, defining a module or a test suite.
-    // Targets can depend on other targets in this package and products from dependencies.
     .target(
-      name: "SnapDraggingModifier"
+      name: "SwiftUISnapDraggingModifier",
+      dependencies: [
+        .product(name: "SwiftUIGestureVelocity", package: "swiftui-gesture-velocity"),
+        .product(name: "SwiftUISupport", package: "swiftui-support"),
+      ]
     ),
     .testTarget(
       name: "SnapDraggingModifierTests",
-      dependencies: ["SnapDraggingModifier"]
+      dependencies: ["SwiftUISnapDraggingModifier"]
     ),
   ]
 )
