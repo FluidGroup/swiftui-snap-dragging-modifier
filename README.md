@@ -1,6 +1,8 @@
 # SwiftUI - SnapDraggingModifier 
 
-This is a small package for SwiftUI that enables the creation of a draggable view and tracks the velocity of the dragging action for use in animations when the drag is released
+This is a small SwiftUI package that allows for the creation of a draggable view and tracks the velocity of the dragging action, which can be used to create fluid animations when the drag is released. This component is a big help in creating interactive user interfaces and enhancing their fluidity.
+
+About Fluid interfaces : https://developer.apple.com/videos/play/wwdc2018/803/
 
 ## Examples
 
@@ -30,6 +32,38 @@ RoundedRectangle(cornerRadius: 16, style: .continuous)
     SnapDraggingModifier(
       axis: [.vertical],
       verticalBoundary: .init(min: -10, max: 10, bandLength: 50)
+    )
+  )
+```
+
+---
+
+**Thowing to the point**
+
+<img width=250 src="https://user-images.githubusercontent.com/1888355/236678943-e6cd9b26-0c5b-407a-8ed1-c1841254cc01.gif" />
+
+"The modifier asks for the destination point when the gesture ends, and the view will smoothly move to the specified point with velocity-based animation."
+
+```swift
+RoundedRectangle(cornerRadius: 16, style: .continuous)
+  .fill(Color.blue)
+  .frame(width: nil, height: 50)
+  .modifier(
+    SnapDraggingModifier(
+      axis: .horizontal,
+      horizontalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
+      handler: .init(onEndDragging: { velocity, offset, contentSize in
+
+        print(velocity, offset, contentSize)
+
+        if velocity.dx > 50 || offset.width > (contentSize.width / 2) {
+          print("remove")
+          return .init(width: contentSize.width, height: 0)
+        } else {
+          print("stay")
+          return .zero
+        }
+      })
     )
   )
 ```
