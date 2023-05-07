@@ -19,7 +19,8 @@ Circle()
 
 **Fixed draggable direction and rubber banding effect**
 
-![CleanShot 2023-05-07 at 21 47 30](https://user-images.githubusercontent.com/1888355/236678569-fc91431a-33ec-48cb-a09f-f6b94fcb85c4.gif)
+<img width=250 src="https://user-images.githubusercontent.com/1888355/236678569-fc91431a-33ec-48cb-a09f-f6b94fcb85c4.gif" />
+
 
 ```swift
 RoundedRectangle(cornerRadius: 16, style: .continuous)
