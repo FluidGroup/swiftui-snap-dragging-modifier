@@ -337,9 +337,13 @@ struct VelocityDraggingModifier_Previews: PreviewProvider {
 
     BookRubberBanding()
 
+    Joystick()
+      .previewDisplayName("Joystick")
+
     Group {
 
-      RoundedRectangle(cornerRadius: 16, style: .circular)
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .fill(Color.blue)
         .frame(width: 120, height: 50)
         .modifier(
           SnapDraggingModifier(
@@ -348,6 +352,8 @@ struct VelocityDraggingModifier_Previews: PreviewProvider {
           )
         )
 
+      SwipeAction()
+        .previewDisplayName("SwipeAction")
     }
   }
 
@@ -376,5 +382,52 @@ struct VelocityDraggingModifier_Previews: PreviewProvider {
       }
     }
   }
+
+  struct Joystick: View {
+
+    var body: some View {
+      stick
+        .padding(10)
+    }
+
+    private var stick: some View {
+      Circle()
+        .fill(Color.blue)
+        .frame(width: 100, height: 100)
+        .modifier(SnapDraggingModifier())
+    }
+  }
+
+  struct SwipeAction: View {
+
+    var body: some View {
+
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .fill(Color.blue)
+        .frame(width: nil, height: 50)
+        .modifier(
+          SnapDraggingModifier(
+            axis: .horizontal,
+            horizontalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
+            handler: .init(onEndDragging: { velocity, offset, contentSize in
+
+              print(velocity, offset, contentSize)
+
+              if velocity.dx > 50 || offset.width > (contentSize.width / 2) {
+                print("remove")
+                return .init(width: contentSize.width, height: 0)
+              } else {
+                print("stay")
+                return .zero
+              }
+            })
+          )
+        )
+        .padding(.horizontal, 20)
+
+    }
+
+  }
+
 }
 #endif
