@@ -95,7 +95,7 @@ public struct SnapDraggingModifier: ViewModifier {
   @State private var targetOffset: CGSize = .zero
 
   @GestureState private var isTracking = false
-  @GestureState private var startPointInView: CGPoint = .zero
+  @GestureState private var pointInView: CGPoint = .zero
 
   @State private var isActive = false
   @State private var contentSize: CGSize = .zero
@@ -132,8 +132,8 @@ public struct SnapDraggingModifier: ViewModifier {
   public func body(content: Content) -> some View {
 
     let base = content
+      .coordinateSpace(name: _CoordinateSpaceTag.pointInView)
       .measureSize($contentSize)
-      .animatableOffset(x: currentOffset.width, y: currentOffset.height)
       .onChange(of: isTracking) { newValue in
         if isTracking == false, currentOffset != targetOffset {
           // For recovery of gesture unexpectedly canceled by the other gesture.
@@ -146,12 +146,14 @@ public struct SnapDraggingModifier: ViewModifier {
       switch gestureMode {
       case .normal:
         base
-          .gesture(dragGesture, including: .all)
+          .gesture(dragGesture.simultaneously(with: gesture), including: .all)
       case .highPriority:
         base
           .highPriorityGesture(dragGesture, including: .all)
       }
     }
+    .animatableOffset(x: currentOffset.width, y: currentOffset.height)
+    .coordinateSpace(name: _CoordinateSpaceTag.transition)
     .onChange(of: isTracking) { newValue in
       if newValue {
         handler.onStartDragging()
@@ -217,10 +219,17 @@ public struct SnapDraggingModifier: ViewModifier {
 
   }
 
+  private var gesture: some Gesture {
+    DragGesture(minimumDistance: 0, coordinateSpace: .named(_CoordinateSpaceTag.pointInView))
+      .updating($pointInView, body: { v, s, _ in
+        s = v.startLocation
+      })
+  }
+
   private var dragGesture: some Gesture {
     DragGesture(
       minimumDistance: activation.minimumDistance,
-      coordinateSpace: .local
+      coordinateSpace: .named(_CoordinateSpaceTag.transition)
     )
     .updating($isTracking, body: { _, state, _ in
       state = true
@@ -232,14 +241,11 @@ public struct SnapDraggingModifier: ViewModifier {
         self.isActive = true
 
         // TODO: including minimumDistance
-        #if false
+
         let resolvedTranslation = CGSize(
-          width: (value.startLocation.x - startPointInView.x) + value.translation.width,
-          height: (value.startLocation.y - startPointInView.y) + value.translation.height
+          width: (value.location.x - pointInView.x),
+          height: (value.location.y - pointInView.y)
         )
-        #else
-        let resolvedTranslation = value.translation
-        #endif
 
         // TODO: stop the current animation when dragging restarted.
         withAnimation(.interactiveSpring()) {
@@ -343,6 +349,11 @@ public struct SnapDraggingModifier: ViewModifier {
 
 }
 
+fileprivate enum _CoordinateSpaceTag: Hashable {
+  case pointInView
+  case transition
+}
+
 #if DEBUG
 struct VelocityDraggingModifier_Previews: PreviewProvider {
   static var previews: some View {
@@ -405,17 +416,16 @@ struct VelocityDraggingModifier_Previews: PreviewProvider {
     private var stick: some View {
       VStack {
         Circle()
-          .fill(Color.blue)
+          .fill(Color.yellow)
           .frame(width: 100, height: 100)
           .modifier(SnapDraggingModifier(springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1)))
         Circle()
-          .fill(Color.blue)
+          .fill(Color.green)
           .frame(width: 100, height: 100)
-
 
       }
       .padding(20)
-      .background(Color.orange)
+      .background(Color.purple)
       .coordinateSpace(name: "A")
     }
   }
