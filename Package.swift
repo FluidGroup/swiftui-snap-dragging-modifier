@@ -13,14 +13,12 @@ let package = Package(
     )
   ],
   dependencies: [
-    .package(url: "https://github.com/FluidGroup/swiftui-gesture-velocity", from: "1.0.0"),
     .package(url: "https://github.com/FluidGroup/swiftui-support", from: "0.4.0")
   ],
   targets: [
     .target(
       name: "SwiftUISnapDraggingModifier",
       dependencies: [
-        .product(name: "SwiftUIGestureVelocity", package: "swiftui-gesture-velocity"),
         .product(name: "SwiftUISupport", package: "swiftui-support"),
       ]
     ),

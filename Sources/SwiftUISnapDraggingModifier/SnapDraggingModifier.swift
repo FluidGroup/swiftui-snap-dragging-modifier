@@ -1,4 +1,3 @@
-import SwiftUIGestureVelocity
 import SwiftUI
 import SwiftUISupport
 
@@ -95,9 +94,8 @@ public struct SnapDraggingModifier: ViewModifier {
   @State private var currentOffset: CGSize = .zero
   @State private var targetOffset: CGSize = .zero
 
-  /// pt/s
-  @GestureVelocity private var velocity: CGVector
   @GestureState private var isTracking = false
+  @GestureState private var startPointInView: CGPoint = .zero
 
   @State private var isActive = false
   @State private var contentSize: CGSize = .zero
@@ -147,9 +145,11 @@ public struct SnapDraggingModifier: ViewModifier {
     Group {
       switch gestureMode {
       case .normal:
-        base.gesture(gesture, including: .all)
+        base
+          .gesture(dragGesture, including: .all)
       case .highPriority:
-        base.highPriorityGesture(gesture, including: .all)
+        base
+          .highPriorityGesture(dragGesture, including: .all)
       }
     }
     .onChange(of: isTracking) { newValue in
@@ -217,7 +217,7 @@ public struct SnapDraggingModifier: ViewModifier {
 
   }
 
-  private var gesture: some Gesture {
+  private var dragGesture: some Gesture {
     DragGesture(
       minimumDistance: activation.minimumDistance,
       coordinateSpace: .local
@@ -232,9 +232,16 @@ public struct SnapDraggingModifier: ViewModifier {
         self.isActive = true
 
         // TODO: including minimumDistance
+        #if false
+        let resolvedTranslation = CGSize(
+          width: (value.startLocation.x - startPointInView.x) + value.translation.width,
+          height: (value.startLocation.y - startPointInView.y) + value.translation.height
+        )
+        #else
         let resolvedTranslation = value.translation
+        #endif
 
-      // TODO: stop the current animation when dragging restarted.
+        // TODO: stop the current animation when dragging restarted.
         withAnimation(.interactiveSpring()) {
           if axis.contains(.horizontal) {
             currentOffset.width = RubberBandingModifier.rubberBand(
@@ -255,17 +262,22 @@ public struct SnapDraggingModifier: ViewModifier {
         }
       }
     })
-    .onEnded({ _ in
+    .onEnded({ value in
 
       if isActive {
-        self.onEnded(velocity: velocity)
+        onEnded(
+          velocity: .init(
+            dx: value.velocity.width,
+            dy: value.velocity.height
+          )
+        )
       } else {
         assert(currentOffset == targetOffset)
       }
 
       self.isActive = false
     })
-    .updatingVelocity($velocity)
+
   }
 
   private func onEnded(velocity: CGVector) {
@@ -391,10 +403,20 @@ struct VelocityDraggingModifier_Previews: PreviewProvider {
     }
 
     private var stick: some View {
-      Circle()
-        .fill(Color.blue)
-        .frame(width: 100, height: 100)
-        .modifier(SnapDraggingModifier())
+      VStack {
+        Circle()
+          .fill(Color.blue)
+          .frame(width: 100, height: 100)
+          .modifier(SnapDraggingModifier(springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1)))
+        Circle()
+          .fill(Color.blue)
+          .frame(width: 100, height: 100)
+
+
+      }
+      .padding(20)
+      .background(Color.orange)
+      .coordinateSpace(name: "A")
     }
   }
 
@@ -409,6 +431,7 @@ struct VelocityDraggingModifier_Previews: PreviewProvider {
           SnapDraggingModifier(
             axis: .horizontal,
             horizontalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
+            springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1),
             handler: .init(onEndDragging: { velocity, offset, contentSize in
 
               print(velocity, offset, contentSize)
