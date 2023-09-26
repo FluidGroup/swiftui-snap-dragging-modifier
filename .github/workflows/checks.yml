@@ -1,0 +1,15 @@
+name: checks
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: macos-13
+
+    steps:
+      - uses: maxim-lobanov/setup-xcode@v1.1
+        with:
+          xcode-version: "15.0"
+      - uses: actions/checkout@v2
+      - name: Run Test
+        run: xcodebuild -scheme SwiftUISnapDraggingModifier -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 14 Pro,OS=16.4'
