@@ -1,4 +1,5 @@
 import SwiftUI
+import RubberBanding
 import SwiftUISupport
 
 @available(*, deprecated, renamed: "SnapDraggingModifier")
@@ -250,7 +251,7 @@ public struct SnapDraggingModifier: ViewModifier {
         // TODO: stop the current animation when dragging restarted.
         withAnimation(.interactiveSpring()) {
           if axis.contains(.horizontal) {
-            currentOffset.width = RubberBandingModifier.rubberBand(
+            currentOffset.width = rubberBand(
               value: resolvedTranslation.width,
               min: horizontalBoundary.min,
               max: horizontalBoundary.max,
@@ -258,7 +259,7 @@ public struct SnapDraggingModifier: ViewModifier {
             )
           }
           if axis.contains(.vertical) {
-            currentOffset.height = RubberBandingModifier.rubberBand(
+            currentOffset.height = rubberBand(
               value: resolvedTranslation.height,
               min: verticalBoundary.min,
               max: verticalBoundary.max,
@@ -358,8 +359,6 @@ fileprivate enum _CoordinateSpaceTag: Hashable {
 struct VelocityDraggingModifier_Previews: PreviewProvider {
   static var previews: some View {
 
-    BookRubberBanding()
-
     Joystick()
       .previewDisplayName("Joystick")
 
@@ -377,32 +376,6 @@ struct VelocityDraggingModifier_Previews: PreviewProvider {
 
       SwipeAction()
         .previewDisplayName("SwipeAction")
-    }
-  }
-
-  struct BookRubberBanding: View {
-
-    @State var isSliding: Bool = false
-
-    var body: some View {
-
-      ZStack {
-
-        // make notification bar
-        RoundedRectangle(cornerRadius: 16, style: .circular)
-          .fill(isSliding ? .red : .blue)
-          .modifier(AmbientShadowModifier(blurRadius: 18))
-          .frame(width: 120, height: 50)
-          .scaleEffect(x: isSliding ? 1 : 1.2, y: isSliding ? 1 : 1.2)
-          .modifier(
-            RubberBandingModifier(onSliding: { isSliding in
-              print(isSliding)
-              withAnimation(.spring()) {
-                self.isSliding = isSliding
-              }
-            })
-          )
-      }
     }
   }
 
