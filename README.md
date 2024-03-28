@@ -4,6 +4,8 @@ This is a small SwiftUI package that allows for the creation of a draggable view
 
 About Fluid interfaces : https://developer.apple.com/videos/play/wwdc2018/803/
 
+> [UIKit Version](https://github.com/FluidGroup/FluidInterfaceKit) FluidInterfaceKit/FluidGesture module
+
 ## Examples
 
 **Throwing a ball**
