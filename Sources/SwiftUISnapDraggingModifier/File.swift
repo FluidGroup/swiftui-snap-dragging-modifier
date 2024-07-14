@@ -43,7 +43,6 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
                 })
             )
           )
-
         }
         .transition(.opacity.animation(.smooth))
 
@@ -84,38 +83,24 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
 
 }
 
-#Preview {
-  struct SwipeAction: View {
 
+#Preview("Transition") {
+  
+  struct TransitionExample: View {
+    @State var isPresented = false
+    
     var body: some View {
-
-      RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .fill(Color.blue)
-        .frame(width: nil, height: 50)
-        .modifier(
-          SnapDraggingModifier(
-            axis: .horizontal,
-            horizontalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
-            springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1),
-            handler: .init(onEndDragging: { velocity, offset, contentSize in
-
-              print(velocity, offset, contentSize)
-
-              if velocity.dx > 50 || offset.width > (contentSize.width / 2) {
-                print("remove")
-                return .init(width: contentSize.width, height: 0)
-              } else {
-                print("stay")
-                return .zero
-              }
-            })
-          )
-        )
-        .padding(.horizontal, 20)
-
+      VStack {
+        Button("Show") {
+          isPresented.toggle()
+        }
+        if isPresented {
+          Text("Hello, World!")
+            .transition(.opacity.animation(.smooth))
+        }
+      }
     }
-
   }
-
-  return SwipeAction()
+  
+  return TransitionExample()
 }
