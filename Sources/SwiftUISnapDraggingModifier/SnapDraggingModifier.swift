@@ -36,6 +36,8 @@ public struct SnapDraggingModifier: ViewModifier {
       (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize) -> CGSize
 
     public var onStartDragging: () -> Void
+    
+    fileprivate var onCompleteAnimation: () -> Void
 
     public init(
       onStartDragging: @escaping () -> Void = {},
@@ -44,6 +46,19 @@ public struct SnapDraggingModifier: ViewModifier {
     ) {
       self.onStartDragging = onStartDragging
       self.onEndDragging = onEndDragging
+      self.onCompleteAnimation = {}
+    }
+    
+    @available(iOS 17.0, *)
+    public init(
+      onStartDragging: @escaping () -> Void = {},
+      onEndDragging: @escaping (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize)
+      -> CGSize = { _, _, _ in .zero },
+      onCompleteAnimation: @escaping () -> Void
+    ) {
+      self.onStartDragging = onStartDragging
+      self.onEndDragging = onEndDragging
+      self.onCompleteAnimation = onCompleteAnimation
     }
   }
 
@@ -333,18 +348,41 @@ public struct SnapDraggingModifier: ViewModifier {
         )
       }
     }
-
-    withAnimation(
-      animationX
-    ) {
-      currentOffset.width = targetOffset.width
-    }
-
-    withAnimation(
-      animationY
-    ) {
-      currentOffset.height = targetOffset.height
-    }
+    
+    if #available(iOS 17.0, *) {
+      let group = DispatchGroup()
+      group.enter()
+      group.enter()
+      
+      group.notify(queue: .main) { [handler] in
+        handler.onCompleteAnimation()
+      }
+      
+      withAnimation(animationX) { 
+        currentOffset.width = targetOffset.width
+      } completion: {           
+        group.leave()
+      }
+      
+      withAnimation(animationY) { 
+        currentOffset.height = targetOffset.height
+      } completion: { 
+        group.leave()
+      }
+            
+    } else {
+      withAnimation(
+        animationX
+      ) {
+        currentOffset.width = targetOffset.width
+      }
+      
+      withAnimation(
+        animationY
+      ) {
+        currentOffset.height = targetOffset.height
+      }
+    }  
 
   }
 
