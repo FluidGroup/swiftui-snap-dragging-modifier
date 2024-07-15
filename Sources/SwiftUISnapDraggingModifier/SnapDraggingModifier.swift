@@ -1,9 +1,7 @@
-import SwiftUI
 import RubberBanding
-import SwiftUISupport
-
-@available(*, deprecated, renamed: "SnapDraggingModifier")
-public typealias VelocityDraggingModifier = SnapDraggingModifier
+import SwiftUI
+import SwiftUISupportSizing
+import SwiftUISupportGeometryEffect
 
 public struct SnapDraggingModifier: ViewModifier {
 
@@ -36,7 +34,7 @@ public struct SnapDraggingModifier: ViewModifier {
       (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize) -> CGSize
 
     public var onStartDragging: () -> Void
-    
+
     fileprivate var onCompleteAnimation: () -> Void
 
     public init(
@@ -48,12 +46,12 @@ public struct SnapDraggingModifier: ViewModifier {
       self.onEndDragging = onEndDragging
       self.onCompleteAnimation = {}
     }
-    
+
     @available(iOS 17.0, *)
     public init(
       onStartDragging: @escaping () -> Void = {},
       onEndDragging: @escaping (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize)
-      -> CGSize = { _, _, _ in .zero },
+        -> CGSize = { _, _, _ in .zero },
       onCompleteAnimation: @escaping () -> Void
     ) {
       self.onStartDragging = onStartDragging
@@ -107,7 +105,7 @@ public struct SnapDraggingModifier: ViewModifier {
    refs:
    https://stackoverflow.com/questions/72880712/animate-gesturestate-on-reset
    */
-  @State private var currentOffset: CGSize = .zero
+  @Binding private var currentOffset: CGSize
   @State private var targetOffset: CGSize = .zero
 
   @GestureState private var isTracking = false
@@ -128,6 +126,7 @@ public struct SnapDraggingModifier: ViewModifier {
   private let handler: Handler
 
   public init(
+    offset: Binding<CGSize>,
     activation: Activation = .init(),
     axis: Axis.Set = [.horizontal, .vertical],
     horizontalBoundary: Boundary = .infinity,
@@ -136,6 +135,7 @@ public struct SnapDraggingModifier: ViewModifier {
     gestureMode: GestureMode = .normal,
     handler: Handler = .init()
   ) {
+    self._currentOffset = offset
     self.axis = axis
     self.springParameter = springParameter
     self.horizontalBoundary = horizontalBoundary
@@ -147,7 +147,8 @@ public struct SnapDraggingModifier: ViewModifier {
 
   public func body(content: Content) -> some View {
 
-    let base = content
+    let base =
+      content
       .coordinateSpace(name: _CoordinateSpaceTag.pointInView)
       .measureSize($contentSize)
       .onChange(of: isTracking) { newValue in
@@ -191,11 +192,16 @@ public struct SnapDraggingModifier: ViewModifier {
       if edge.contains(.leading) {
         switch layoutDirection {
         case .leftToRight:
-          if CGRect(origin: .zero, size: .init(width: space, height: contentSize.height)).contains(startLocation) {
+          if CGRect(origin: .zero, size: .init(width: space, height: contentSize.height)).contains(
+            startLocation
+          ) {
             return true
           }
         case .rightToLeft:
-          if CGRect(origin: .init(x: contentSize.width - space, y: 0), size: .init(width: space, height: contentSize.height)).contains(startLocation) {
+          if CGRect(
+            origin: .init(x: contentSize.width - space, y: 0),
+            size: .init(width: space, height: contentSize.height)
+          ).contains(startLocation) {
             return true
           }
         @unknown default:
@@ -206,11 +212,16 @@ public struct SnapDraggingModifier: ViewModifier {
       if edge.contains(.trailing) {
         switch layoutDirection {
         case .leftToRight:
-          if CGRect(origin: .init(x: contentSize.width - space, y: 0), size: .init(width: space, height: contentSize.height)).contains(startLocation) {
+          if CGRect(
+            origin: .init(x: contentSize.width - space, y: 0),
+            size: .init(width: space, height: contentSize.height)
+          ).contains(startLocation) {
             return true
           }
         case .rightToLeft:
-          if CGRect(origin: .zero, size: .init(width: 20, height: CGFloat.greatestFiniteMagnitude)).contains(startLocation) {
+          if CGRect(origin: .zero, size: .init(width: 20, height: CGFloat.greatestFiniteMagnitude))
+            .contains(startLocation)
+          {
             return true
           }
         @unknown default:
@@ -219,13 +230,18 @@ public struct SnapDraggingModifier: ViewModifier {
       }
 
       if edge.contains(.top) {
-        if CGRect(origin: .zero, size: .init(width: contentSize.width, height: space)).contains(startLocation) {
+        if CGRect(origin: .zero, size: .init(width: contentSize.width, height: space)).contains(
+          startLocation
+        ) {
           return true
         }
       }
 
       if edge.contains(.bottom) {
-        if CGRect(origin: .init(x: 0, y: contentSize.height - space), size: .init(width: contentSize.width, height: space)).contains(startLocation) {
+        if CGRect(
+          origin: .init(x: 0, y: contentSize.height - space),
+          size: .init(width: contentSize.width, height: space)
+        ).contains(startLocation) {
           return true
         }
       }
@@ -237,9 +253,12 @@ public struct SnapDraggingModifier: ViewModifier {
 
   private var gesture: some Gesture {
     DragGesture(minimumDistance: 0, coordinateSpace: .named(_CoordinateSpaceTag.pointInView))
-      .updating($pointInView, body: { v, s, _ in
-        s = v.startLocation
-      })
+      .updating(
+        $pointInView,
+        body: { v, s, _ in
+          s = v.startLocation
+        }
+      )
   }
 
   private var dragGesture: some Gesture {
@@ -247,9 +266,12 @@ public struct SnapDraggingModifier: ViewModifier {
       minimumDistance: activation.minimumDistance,
       coordinateSpace: .named(_CoordinateSpaceTag.transition)
     )
-    .updating($isTracking, body: { _, state, _ in
-      state = true
-    })
+    .updating(
+      $isTracking,
+      body: { _, state, _ in
+        state = true
+      }
+    )
     .onChanged({ value in
 
       if self.isActive || isInActivation(startLocation: value.startLocation) {
@@ -348,130 +370,136 @@ public struct SnapDraggingModifier: ViewModifier {
         )
       }
     }
-    
+
     if #available(iOS 17.0, *) {
       let group = DispatchGroup()
       group.enter()
       group.enter()
-      
+
       group.notify(queue: .main) { [handler] in
         handler.onCompleteAnimation()
       }
-      
-      withAnimation(animationX) { 
+
+      withAnimation(animationX) {
         currentOffset.width = targetOffset.width
-      } completion: {           
+      } completion: {
         group.leave()
       }
-      
-      withAnimation(animationY) { 
+
+      withAnimation(animationY) {
         currentOffset.height = targetOffset.height
-      } completion: { 
+      } completion: {
         group.leave()
       }
-            
+
     } else {
       withAnimation(
         animationX
       ) {
         currentOffset.width = targetOffset.width
       }
-      
+
       withAnimation(
         animationY
       ) {
         currentOffset.height = targetOffset.height
       }
-    }  
+    }
 
   }
 
 }
 
-fileprivate enum _CoordinateSpaceTag: Hashable {
+private enum _CoordinateSpaceTag: Hashable {
   case pointInView
   case transition
 }
 
 #if DEBUG
-struct VelocityDraggingModifier_Previews: PreviewProvider {
-  static var previews: some View {
 
-    Joystick()
-      .previewDisplayName("Joystick")
+#Preview("Joystick") {
+  Joystick()
+}
 
-    Group {
+#Preview("SwipeAction") {
+  SwipeAction()
+}
 
-      RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .fill(Color.blue)
-        .frame(width: 120, height: 50)
-        .modifier(
-          SnapDraggingModifier(
-            axis: [.vertical],
-            verticalBoundary: .init(min: -10, max: 10, bandLength: 50)
-          )
-        )
+struct Joystick: View {
 
-      SwipeAction()
-        .previewDisplayName("SwipeAction")
-    }
+  @State var offset: CGSize = .zero
+
+  @State var isOn: Bool = false
+
+  var body: some View {
+    stick
+      .padding(10)
   }
 
-  struct Joystick: View {
+  private var stick: some View {
 
-    var body: some View {
-      stick
-        .padding(10)
-    }
+    VStack {
 
-    private var stick: some View {
-      VStack {
-        Circle()
-          .fill(Color.yellow)
-          .frame(width: 100, height: 100)
-          .modifier(SnapDraggingModifier(springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1)))
-        Circle()
-          .fill(Color.green)
-          .frame(width: 100, height: 100)
-
+      Button("Add offset") {
+        withAnimation(.interpolatingSpring(mass: 1, stiffness: 1, damping: 1, initialVelocity: 0)) {
+          offset.width += 10
+        }
       }
-      .padding(20)
-      .background(Color.purple)
-      .coordinateSpace(name: "A")
-    }
-  }
 
-  struct SwipeAction: View {
-
-    var body: some View {
-
-      RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .fill(Color.blue)
-        .frame(width: nil, height: 50)
+      Circle()
+        .fill(Color.yellow)
+        .frame(width: 100, height: 100)
         .modifier(
           SnapDraggingModifier(
-            axis: .horizontal,
-            horizontalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
-            springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1),
-            handler: .init(onEndDragging: { velocity, offset, contentSize in
-
-              print(velocity, offset, contentSize)
-
-              if velocity.dx > 50 || offset.width > (contentSize.width / 2) {
-                print("remove")
-                return .init(width: contentSize.width, height: 0)
-              } else {
-                print("stay")
-                return .zero
-              }
-            })
+            offset: $offset,
+            springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1)
           )
         )
-        .padding(.horizontal, 20)
+      Circle()
+        .fill(Color.green)
+        .frame(width: 100, height: 100)
 
     }
+    .padding(20)
+    .background(Color.secondary)
+    .coordinateSpace(name: "A")
+
+  }
+}
+
+struct SwipeAction: View {
+
+  @State var offset: CGSize = .zero
+
+  var body: some View {
+
+    RoundedRectangle(cornerRadius: 16, style: .continuous)
+      .fill(Color.blue)
+      .frame(width: nil, height: 50)
+      .modifier(
+        SnapDraggingModifier(
+          offset: $offset,
+          axis: .horizontal,
+          horizontalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
+          springParameter: .interpolation(mass: 1, stiffness: 100, damping: 10),
+          handler: .init(onEndDragging: { velocity, offset, contentSize in
+
+            print(velocity, offset, contentSize)
+
+            if velocity.dx > 50 || offset.width > (contentSize.width / 2) {
+              print("remove")
+              return .init(width: contentSize.width, height: 0)
+            } else {
+              print("stay")
+              return .zero
+            }
+          })
+        )
+      )
+      .padding(.horizontal, 20)
 
   }
 
 }
+
 #endif

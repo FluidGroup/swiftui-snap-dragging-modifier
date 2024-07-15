@@ -21,7 +21,8 @@ let package = Package(
       name: "SwiftUISnapDraggingModifier",
       dependencies: [
         .product(name: "RubberBanding", package: "swift-rubber-banding"),
-        .product(name: "SwiftUISupport", package: "swiftui-support"),
+        .product(name: "SwiftUISupportSizing", package: "swiftui-support"),
+        .product(name: "SwiftUISupportGeometryEffect", package: "swiftui-support"),
       ]
     ),
     .testTarget(

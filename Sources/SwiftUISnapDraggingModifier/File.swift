@@ -1,9 +1,11 @@
 import SwiftUI
+import SwiftUISupportSizing
 
 public struct SheetModifier<DisplayContent: View>: ViewModifier {
 
   private let displayContent: () -> DisplayContent
   @Binding var isPresented: Bool
+  @State var contentOffset: CGSize = .zero
 
   public init(
     isPresented: Binding<Bool>,
@@ -16,7 +18,7 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
   public func body(content: Content) -> some View {
     ZStack {
       content
-      if isPresented {
+//      if isPresented {
         VStack {
           Spacer(minLength: 0)
           ZStack {
@@ -27,6 +29,7 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
           .fixedSize(horizontal: false, vertical: true)
           .modifier(
             SnapDraggingModifier(
+              offset: $contentOffset, 
               axis: .vertical,
               verticalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
               springParameter: .hard,
@@ -43,8 +46,8 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
                 })
             )
           )
-        }
-        .transition(.opacity.animation(.smooth))
+//        }
+//        .transition(.opacity.animation(.smooth))
 
       }
     }
