@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
   name: "swiftui-snap-dragging-modifier",
-  platforms: [.iOS(.v14)],
+  platforms: [.iOS(.v15)],
   products: [
     .library(
       name: "SwiftUISnapDraggingModifier",
