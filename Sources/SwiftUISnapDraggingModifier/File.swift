@@ -51,16 +51,17 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
                 contentOffset.height = 0
               }
             } else {
-              
+              withAnimation(.spring(response: 0.45)) {
+                contentOffset.height = contentSize.height
+              }
             }
           }
           .onChange(of: contentSize) { contentSize in
             print("contentSize: \(contentSize)")
-            
-            self.contentOffset.height = contentSize.height
+            if isPresented == false {
+              self.contentOffset.height = contentSize.height
+            }
           }
-//        }
-//        .transition(.opacity.animation(.smooth))
 
       }
     }
@@ -101,7 +102,9 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
             }
             
             Button("Detail") {
-              isExpanded.toggle()
+              withAnimation(.spring) {
+                isExpanded.toggle()
+              }
             }
             .buttonBorderShape(.roundedRectangle)
           }
@@ -109,7 +112,8 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
         }
         .padding()
       }
-      .padding()
+      .clipped()
+      .padding(8)     
     }
   }
 
@@ -146,7 +150,7 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
     
     var body: some View {
       VStack {
-        Button("Show") {
+        Button("Show") {          
           isPresented.toggle()
         }
         if isPresented {
