@@ -6,8 +6,18 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
   private let displayContent: () -> DisplayContent
   @Binding var isPresented: Bool
   @State var contentOffset: CGSize = .zero
-  
+
   @State var contentSize: CGSize = .zero
+  @State var safeAreaInsets: EdgeInsets = .init()
+  
+  private var hidingOffset: CGFloat {
+    (contentSize.height + safeAreaInsets.bottom)
+  }
+  
+  private var animation: SnapDraggingModifier.SpringParameter {
+//    .interpolation(mass: 1, stiffness: 1, damping: 1)
+    return .hard
+  }
 
   public init(
     isPresented: Binding<Bool>,
@@ -20,26 +30,28 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
   public func body(content: Content) -> some View {
     ZStack {
       content
-//      if isPresented {
-        VStack {
-          Spacer(minLength: 0)
-          displayContent()
+      
+      VStack {
+        Spacer(minLength: 0)
+        displayContent()
+          .readingGeometry(
+            transform: \.size,
+            target: $contentSize
+          )
           .fixedSize(horizontal: false, vertical: true)
-          .measureSize($contentSize)
           .modifier(
             SnapDraggingModifier(
-              offset: $contentOffset, 
+              offset: $contentOffset,
               axis: .vertical,
               verticalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
-              springParameter: .hard,
+              springParameter: animation,
               handler: .init(
                 onEndDragging: { velocity, offset, contentSize in
 
                   if velocity.dy > 50 || offset.height > (contentSize.width / 2) {
-                    print("remove")
-                    return .init(width: 0, height: contentSize.height)
+                    isPresented = false
+                    return .init(width: 0, height: hidingOffset)
                   } else {
-                    print("stay")
                     return .zero
                   }
                 })
@@ -52,44 +64,64 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
               }
             } else {
               withAnimation(.spring(response: 0.45)) {
-                contentOffset.height = contentSize.height
+                contentOffset.height = hidingOffset
               }
             }
           }
-          .onChange(of: contentSize) { contentSize in
-            print("contentSize: \(contentSize)")
-            if isPresented == false {
-              self.contentOffset.height = contentSize.height
-            }
-          }
+          .onChange(of: contentOffset) { contentOffset in
 
+          }
       }
+      .readingGeometry(
+        transform: \.safeAreaInsets,
+        target: $safeAreaInsets
+      )    
     }
   }
 
 }
 
 #Preview {
-  
+
   struct SheetContent: View {
-    
+
     @State var isExpanded = false
-    
+
     var body: some View {
       ZStack {
         RoundedRectangle(cornerRadius: 20)
           .fill(.background)
         HStack {
-          VStack(alignment: .leading) {                            
+          VStack(alignment: .leading) {
+            
             Text("This is a sheet")
-              .font(.title)    
-            VStack {
-              Text("Hello, World!")
-              Text("Hello, World!")
-              Text("Hello, World!")
+              .font(.title)
+            
+            HStack {
+              VStack {
+                Text("Hello, World!")
+                Text("Hello, World!")
+                Text("Hello, World!")
+              }
+              .padding(10)
+              .background(RoundedRectangle(cornerRadius: 10).fill(.tertiary))
+              
+              ScrollView {
+                VStack {
+                  Text("Vertical ScrollView")
+                  Text("Vertical ScrollView")
+                  Text("Vertical ScrollView")
+                }
+              }
             }
-            .padding()
-            .background(RoundedRectangle(cornerRadius: 20).fill(Color.secondary))
+            
+            ScrollView(.horizontal) {
+              HStack {
+                Text("Horizontal ScrollView")
+                Text("Horizontal ScrollView")
+                Text("Horizontal ScrollView")
+              }
+            }
             
             if isExpanded {
               VStack {
@@ -97,23 +129,26 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
                 Text("Hello, World!")
                 Text("Hello, World!")
               }
-              .padding()
-              .background(RoundedRectangle(cornerRadius: 20).fill(Color.secondary))
+              .padding(10)
+              .background(RoundedRectangle(cornerRadius: 10).fill(.tertiary))
             }
-            
-            Button("Detail") {
-              withAnimation(.spring) {
-                isExpanded.toggle()
+
+            HStack {
+              Spacer()
+              Button("Detail") {
+                withAnimation(.spring) {
+                  isExpanded.toggle()
+                }
               }
+              .buttonBorderShape(.roundedRectangle)
             }
-            .buttonBorderShape(.roundedRectangle)
           }
           Spacer(minLength: 0)
         }
         .padding()
       }
       .clipped()
-      .padding(8)     
+      .padding(8)
     }
   }
 
@@ -127,7 +162,7 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
           isPresented.toggle()
         }
         Rectangle()
-          .fill(Color.purple)      
+          .fill(Color.purple)
           .ignoresSafeArea()
       }
       .modifier(
@@ -142,15 +177,14 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
 
 }
 
-
 #Preview("Transition") {
-  
+
   struct TransitionExample: View {
     @State var isPresented = false
-    
+
     var body: some View {
       VStack {
-        Button("Show") {          
+        Button("Show") {
           isPresented.toggle()
         }
         if isPresented {
@@ -160,6 +194,6 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
       }
     }
   }
-  
+
   return TransitionExample()
 }
