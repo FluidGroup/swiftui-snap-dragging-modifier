@@ -157,15 +157,17 @@ public struct SnapDraggingModifier: ViewModifier {
           self.onEnded(velocity: .zero)
         }
       }
+    
+    let addingGesture = dragGesture.simultaneously(with: gesture)
 
     Group {
       switch gestureMode {
       case .normal:
         base
-          .gesture(dragGesture.simultaneously(with: gesture), including: .all)
+          .gesture(addingGesture, including: .all)
       case .highPriority:
         base
-          .highPriorityGesture(dragGesture, including: .all)
+          .highPriorityGesture(addingGesture, including: .all)
       }
     }
     .animatableOffset(x: currentOffset.width, y: currentOffset.height)
@@ -407,8 +409,14 @@ struct VelocityDraggingModifier_Previews: PreviewProvider {
         .frame(width: 120, height: 50)
         .modifier(
           SnapDraggingModifier(
+<<<<<<< Updated upstream
             axis: [.vertical],
             verticalBoundary: .init(min: -10, max: 10, bandLength: 50)
+=======
+            offset: $offset,
+            springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1),
+            gestureMode: .highPriority
+>>>>>>> Stashed changes
           )
         )
 
