@@ -110,6 +110,7 @@ public struct SnapDraggingModifier: ViewModifier {
   
   @GestureState private var isTracking = false
   @GestureState private var pointInView: CGPoint = .zero
+  @GestureState private var paddingTranslation: CGSize = .zero
   
   @State private var isActive = false
   @State private var contentSize: CGSize = .zero
@@ -159,7 +160,9 @@ public struct SnapDraggingModifier: ViewModifier {
         }
       }
     
-    let addingGesture = dragGesture.simultaneously(with: gesture)
+    let addingGesture = dragGesture
+      .simultaneously(with: trackingGesture)
+      .simultaneously(with: grabbingPointGesture)
     
     Group {
       switch gestureMode {
@@ -253,14 +256,34 @@ public struct SnapDraggingModifier: ViewModifier {
     
   }
   
-  private var gesture: some Gesture {
-    DragGesture(minimumDistance: 0, coordinateSpace: .named(_CoordinateSpaceTag.pointInView))
+  private var grabbingPointGesture: some Gesture {
+    DragGesture(
+      minimumDistance: 0,
+      coordinateSpace: .named(_CoordinateSpaceTag.pointInView)
+    )
       .updating(
         $pointInView,
         body: { v, s, _ in
           s = v.startLocation
         }
       )
+  }
+  
+  private var trackingGesture: some Gesture {
+    DragGesture(
+      minimumDistance: 0,
+      coordinateSpace: .named(_CoordinateSpaceTag.transition)
+    )
+    .updating($paddingTranslation, body: { value, state, _ in 
+      let reservedTranslation = CGSize(
+        width: (value.location.x - pointInView.x),
+        height: (value.location.y - pointInView.y)
+      )
+      
+      if self.isActive == false {      
+        state = reservedTranslation
+      }
+    })
   }
   
   private var dragGesture: some Gesture {
@@ -280,12 +303,17 @@ public struct SnapDraggingModifier: ViewModifier {
         
         self.isActive = true
         
-        // TODO: including minimumDistance
+        // TODO: including minimumDistance                        
         
-        let resolvedTranslation = CGSize(
+        var resolvedTranslation = CGSize(
           width: (value.location.x - pointInView.x),
           height: (value.location.y - pointInView.y)
         )
+        
+        resolvedTranslation.width -= paddingTranslation.width
+        resolvedTranslation.height -= paddingTranslation.height
+        
+        print(paddingTranslation,resolvedTranslation)              
         
         // TODO: stop the current animation when dragging restarted.
         withAnimation(.interactiveSpring()) {
@@ -452,8 +480,9 @@ struct Joystick: View {
         .fill(Color.yellow)
         .frame(width: 100, height: 100)
         .modifier(
-          SnapDraggingModifier(
+          SnapDraggingModifier(            
             offset: $offset,
+            activation: .init(minimumDistance: 50),
             springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1)
           )
         )
@@ -481,6 +510,7 @@ struct SwipeAction: View {
       .modifier(
         SnapDraggingModifier(
           offset: $offset,
+          activation: .init(minimumDistance: 10),
           axis: .horizontal,
           horizontalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
           springParameter: .interpolation(mass: 1, stiffness: 100, damping: 10),
