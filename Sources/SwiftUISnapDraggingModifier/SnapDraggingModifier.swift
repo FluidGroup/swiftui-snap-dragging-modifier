@@ -4,43 +4,43 @@ import SwiftUISupportSizing
 import SwiftUISupportGeometryEffect
 
 public struct SnapDraggingModifier: ViewModifier {
-
+  
   public struct Activation {
-
+    
     public enum Region {
       /// entire view
       case screen
       ///
       case edge(Edge.Set)
     }
-
+    
     public let minimumDistance: Double
     public let regionToActivate: Region
-
+    
     public init(minimumDistance: Double = 0, regionToActivate: Region = .screen) {
       self.minimumDistance = minimumDistance
       self.regionToActivate = regionToActivate
     }
   }
-
+  
   public struct Handler {
     /**
      A callback closure that is called when the user finishes dragging the content.
      This closure takes a CGSize as a return value, which is used as the target offset to finalize the animation.
-
+     
      For example, return CGSize.zero to put it back to the original position.
      */
     public var onEndDragging:
-      (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize) -> CGSize
-
+    (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize) -> CGSize
+    
     public var onStartDragging: () -> Void
 
     fileprivate var onCompleteAnimation: () -> Void
-
+    
     public init(
       onStartDragging: @escaping () -> Void = {},
       onEndDragging: @escaping (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize)
-        -> CGSize = { _, _, _ in .zero }
+      -> CGSize = { _, _, _ in .zero }
     ) {
       self.onStartDragging = onStartDragging
       self.onEndDragging = onEndDragging
@@ -59,35 +59,35 @@ public struct SnapDraggingModifier: ViewModifier {
       self.onCompleteAnimation = onCompleteAnimation
     }
   }
-
+  
   public enum GestureMode {
     case normal
     case highPriority
   }
-
+  
   public enum SpringParameter {
     case interpolation(
       mass: Double,
       stiffness: Double,
       damping: Double
     )
-
+    
     public static var hard: Self {
       .interpolation(mass: 1.0, stiffness: 200, damping: 20)
     }
   }
-
+  
   public struct Boundary {
     public let min: Double
     public let max: Double
     public let bandLength: Double
-
+    
     public init(min: Double, max: Double, bandLength: Double) {
       self.min = min
       self.max = max
       self.bandLength = bandLength
     }
-
+    
     public static var infinity: Self {
       return .init(
         min: -Double.greatestFiniteMagnitude,
@@ -96,35 +96,35 @@ public struct SnapDraggingModifier: ViewModifier {
       )
     }
   }
-
+  
   /**
    ???
    Use just State instead of GestureState to trigger animation on gesture ended.
    This approach is right?
-
+   
    refs:
    https://stackoverflow.com/questions/72880712/animate-gesturestate-on-reset
    */
   @Binding private var currentOffset: CGSize
   @State private var targetOffset: CGSize = .zero
-
+  
   @GestureState private var isTracking = false
   @GestureState private var pointInView: CGPoint = .zero
-
+  
   @State private var isActive = false
   @State private var contentSize: CGSize = .zero
-
+  
   @Environment(\.layoutDirection) var layoutDirection
-
+  
   public let axis: Axis.Set
   public let springParameter: SpringParameter
   public let gestureMode: GestureMode
   public let activation: Activation
-
+  
   private let horizontalBoundary: Boundary
   private let verticalBoundary: Boundary
   private let handler: Handler
-
+  
   public init(
     offset: Binding<CGSize>,
     activation: Activation = .init(),
@@ -144,11 +144,11 @@ public struct SnapDraggingModifier: ViewModifier {
     self.handler = handler
     self.activation = activation
   }
-
+  
   public func body(content: Content) -> some View {
-
+    
     let base =
-      content
+    content
       .coordinateSpace(name: _CoordinateSpaceTag.pointInView)
       .measureSize($contentSize)
       .onChange(of: isTracking) { newValue in
@@ -158,15 +158,17 @@ public struct SnapDraggingModifier: ViewModifier {
           self.onEnded(velocity: .zero)
         }
       }
-
+    
+    let addingGesture = dragGesture.simultaneously(with: gesture)
+    
     Group {
       switch gestureMode {
       case .normal:
         base
-          .gesture(dragGesture.simultaneously(with: gesture), including: .all)
+          .gesture(addingGesture, including: .all)
       case .highPriority:
         base
-          .highPriorityGesture(dragGesture, including: .all)
+          .highPriorityGesture(addingGesture, including: .all)
       }
     }
     .animatableOffset(x: currentOffset.width, y: currentOffset.height)
@@ -176,19 +178,19 @@ public struct SnapDraggingModifier: ViewModifier {
         handler.onStartDragging()
       }
     }
-
+    
   }
-
+  
   private func isInActivation(startLocation: CGPoint) -> Bool {
-
+    
     switch activation.regionToActivate {
     case .screen:
       return true
     case .edge(let edge):
-
+      
       let space: Double = 20
       let contentSize = self.contentSize
-
+      
       if edge.contains(.leading) {
         switch layoutDirection {
         case .leftToRight:
@@ -208,7 +210,7 @@ public struct SnapDraggingModifier: ViewModifier {
           break
         }
       }
-
+      
       if edge.contains(.trailing) {
         switch layoutDirection {
         case .leftToRight:
@@ -228,7 +230,7 @@ public struct SnapDraggingModifier: ViewModifier {
           return false
         }
       }
-
+      
       if edge.contains(.top) {
         if CGRect(origin: .zero, size: .init(width: contentSize.width, height: space)).contains(
           startLocation
@@ -236,7 +238,7 @@ public struct SnapDraggingModifier: ViewModifier {
           return true
         }
       }
-
+      
       if edge.contains(.bottom) {
         if CGRect(
           origin: .init(x: 0, y: contentSize.height - space),
@@ -245,12 +247,12 @@ public struct SnapDraggingModifier: ViewModifier {
           return true
         }
       }
-
+      
       return false
     }
-
+    
   }
-
+  
   private var gesture: some Gesture {
     DragGesture(minimumDistance: 0, coordinateSpace: .named(_CoordinateSpaceTag.pointInView))
       .updating(
@@ -260,7 +262,7 @@ public struct SnapDraggingModifier: ViewModifier {
         }
       )
   }
-
+  
   private var dragGesture: some Gesture {
     DragGesture(
       minimumDistance: activation.minimumDistance,
@@ -273,18 +275,18 @@ public struct SnapDraggingModifier: ViewModifier {
       }
     )
     .onChanged({ value in
-
+      
       if self.isActive || isInActivation(startLocation: value.startLocation) {
-
+        
         self.isActive = true
-
+        
         // TODO: including minimumDistance
-
+        
         let resolvedTranslation = CGSize(
           width: (value.location.x - pointInView.x),
           height: (value.location.y - pointInView.y)
         )
-
+        
         // TODO: stop the current animation when dragging restarted.
         withAnimation(.interactiveSpring()) {
           if axis.contains(.horizontal) {
@@ -307,7 +309,7 @@ public struct SnapDraggingModifier: ViewModifier {
       }
     })
     .onEnded({ value in
-
+      
       if isActive {
         onEnded(
           velocity: .init(
@@ -318,35 +320,35 @@ public struct SnapDraggingModifier: ViewModifier {
       } else {
         assert(currentOffset == targetOffset)
       }
-
+      
       self.isActive = false
     })
-
+    
   }
-
+  
   private func onEnded(velocity: CGVector) {
     var usingVelocity = velocity
-
+    
     let targetOffset: CGSize = handler.onEndDragging(
       &usingVelocity,
       self.currentOffset,
       self.contentSize
     )
-
+    
     self.targetOffset = targetOffset
-
+    
     let velocity = usingVelocity
-
+    
     let distance = CGSize(
       width: targetOffset.width - currentOffset.width,
       height: targetOffset.height - currentOffset.height
     )
-
+    
     let mappedVelocity = CGVector(
       dx: velocity.dx / distance.width,
       dy: velocity.dy / distance.height
     )
-
+    
     var animationX: Animation {
       switch springParameter {
       case .interpolation(let mass, let stiffness, let damping):
@@ -358,7 +360,7 @@ public struct SnapDraggingModifier: ViewModifier {
         )
       }
     }
-
+    
     var animationY: Animation {
       switch springParameter {
       case .interpolation(let mass, let stiffness, let damping):
@@ -379,19 +381,19 @@ public struct SnapDraggingModifier: ViewModifier {
       group.notify(queue: .main) { [handler] in
         handler.onCompleteAnimation()
       }
-
+      
       withAnimation(animationX) {
         currentOffset.width = targetOffset.width
       } completion: {
         group.leave()
       }
-
+      
       withAnimation(animationY) {
         currentOffset.height = targetOffset.height
       } completion: {
         group.leave()
       }
-
+      
     } else {
       withAnimation(
         animationX
@@ -405,9 +407,9 @@ public struct SnapDraggingModifier: ViewModifier {
         currentOffset.height = targetOffset.height
       }
     }
-
+    
   }
-
+  
 }
 
 private enum _CoordinateSpaceTag: Hashable {
@@ -426,26 +428,26 @@ private enum _CoordinateSpaceTag: Hashable {
 }
 
 struct Joystick: View {
-
+  
   @State var offset: CGSize = .zero
-
+  
   @State var isOn: Bool = false
-
+  
   var body: some View {
     stick
       .padding(10)
   }
-
+  
   private var stick: some View {
-
+    
     VStack {
-
+      
       Button("Add offset") {
         withAnimation(.interpolatingSpring(mass: 1, stiffness: 1, damping: 1, initialVelocity: 0)) {
           offset.width += 10
         }
       }
-
+      
       Circle()
         .fill(Color.yellow)
         .frame(width: 100, height: 100)
@@ -458,21 +460,21 @@ struct Joystick: View {
       Circle()
         .fill(Color.green)
         .frame(width: 100, height: 100)
-
+      
     }
     .padding(20)
     .background(Color.secondary)
     .coordinateSpace(name: "A")
-
+    
   }
 }
 
 struct SwipeAction: View {
-
+  
   @State var offset: CGSize = .zero
-
+  
   var body: some View {
-
+    
     RoundedRectangle(cornerRadius: 16, style: .continuous)
       .fill(Color.blue)
       .frame(width: nil, height: 50)
@@ -483,9 +485,9 @@ struct SwipeAction: View {
           horizontalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
           springParameter: .interpolation(mass: 1, stiffness: 100, damping: 10),
           handler: .init(onEndDragging: { velocity, offset, contentSize in
-
+            
             print(velocity, offset, contentSize)
-
+            
             if velocity.dx > 50 || offset.width > (contentSize.width / 2) {
               print("remove")
               return .init(width: contentSize.width, height: 0)
@@ -497,9 +499,9 @@ struct SwipeAction: View {
         )
       )
       .padding(.horizontal, 20)
-
+    
   }
-
+  
 }
 
 #endif

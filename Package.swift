@@ -13,7 +13,7 @@ let package = Package(
     )
   ],
   dependencies: [
-    .package(url: "https://github.com/FluidGroup/swiftui-support", from: "0.4.0"),
+    .package(url: "https://github.com/FluidGroup/swiftui-support", from: "0.9.0"),
     .package(url: "https://github.com/FluidGroup/swift-rubber-banding", from: "1.0.0")
   ],
   targets: [
