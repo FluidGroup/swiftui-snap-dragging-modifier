@@ -80,7 +80,6 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
   }
 
 }
-
 #Preview {
 
   struct SheetContent: View {

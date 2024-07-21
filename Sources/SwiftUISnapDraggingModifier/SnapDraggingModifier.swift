@@ -161,22 +161,50 @@ public struct SnapDraggingModifier: ViewModifier {
     
     let addingGesture = dragGesture.simultaneously(with: gesture)
     
-    Group {
-      switch gestureMode {
-      case .normal:
-        base
-          .gesture(addingGesture, including: .all)
-      case .highPriority:
-        base
-          .highPriorityGesture(addingGesture, including: .all)
+    if #available(iOS 18, *) {
+      
+      Group {
+        switch gestureMode {
+        case .normal:
+          base
+            .gesture(_gesture)
+            .simultaneousGesture(gesture)
+//            .gesture(addingGesture, including: .all)
+        case .highPriority:
+          base
+            .gesture(_gesture)
+            .simultaneousGesture(gesture)
+//            .highPriorityGesture(addingGesture, including: .all)
+        }
       }
-    }
-    .animatableOffset(x: currentOffset.width, y: currentOffset.height)
-    .coordinateSpace(name: _CoordinateSpaceTag.transition)
-    .onChange(of: isTracking) { newValue in
-      if newValue {
-        handler.onStartDragging()
+      .animatableOffset(x: currentOffset.width, y: currentOffset.height)
+      .coordinateSpace(name: _CoordinateSpaceTag.transition)
+      .onChange(of: isTracking) { newValue in
+        if newValue {
+          handler.onStartDragging()
+        }
       }
+      
+    } else {
+      
+      Group {
+        switch gestureMode {
+        case .normal:
+          base
+            .gesture(addingGesture, including: .all)
+        case .highPriority:
+          base
+            .highPriorityGesture(addingGesture, including: .all)
+        }
+      }
+      .animatableOffset(x: currentOffset.width, y: currentOffset.height)
+      .coordinateSpace(name: _CoordinateSpaceTag.transition)
+      .onChange(of: isTracking) { newValue in
+        if newValue {
+          handler.onStartDragging()
+        }
+      }
+      
     }
     
   }
@@ -263,11 +291,63 @@ public struct SnapDraggingModifier: ViewModifier {
       )
   }
   
+  @available(iOS 18.0, *)
+  @available(macOS, unavailable)
+  @available(tvOS, unavailable)
+  @available(watchOS, unavailable)
+  @available(visionOS, unavailable)
+  private var _gesture: some UIGestureRecognizerRepresentable {
+    CustomGesture(
+      coordinateSpaceInDragging: .named(_CoordinateSpaceTag.transition),
+      coordinateSpaceInView: .named(_CoordinateSpaceTag.pointInView),
+      onChange: { value in 
+      
+//      if self.isActive || isInActivation(startLocation: value.startLocation) {
+//        
+//        self.isActive = true
+                
+        let resolvedTranslation = CGSize(
+          width: (value.location.x - pointInView.x),
+          height: (value.location.y - pointInView.y)
+        )
+        
+        
+        // TODO: stop the current animation when dragging restarted.
+        withAnimation(.interactiveSpring()) {
+          if axis.contains(.horizontal) {
+            currentOffset.width = rubberBand(
+              value: resolvedTranslation.width,
+              min: horizontalBoundary.min,
+              max: horizontalBoundary.max,
+              bandLength: horizontalBoundary.bandLength
+            )
+          }
+          if axis.contains(.vertical) {
+            currentOffset.height = rubberBand(
+              value: resolvedTranslation.height,
+              min: verticalBoundary.min,
+              max: verticalBoundary.max,
+              bandLength: verticalBoundary.bandLength
+            )
+          }
+        }
+//      }
+      }, onEnd: { value in 
+        onEnded(
+          velocity: .init(
+            dx: value.velocity.width,
+            dy: value.velocity.height
+          )
+        )
+      })
+  }
+  
   private var dragGesture: some Gesture {
+    
     DragGesture(
       minimumDistance: activation.minimumDistance,
       coordinateSpace: .named(_CoordinateSpaceTag.transition)
-    )
+    )    
     .updating(
       $isTracking,
       body: { _, state, _ in
