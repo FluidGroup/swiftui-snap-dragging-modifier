@@ -152,6 +152,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
             context.coordinator.tracking.isDragging = true
             _onChange(value.fixingLocation(context.coordinator.tracking.trackingLocation))
           } else {
+            scrollController.unlockScrolling(direction: .vertical)
             context.coordinator.tracking.isDragging = false
           }
 
@@ -166,6 +167,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
             context.coordinator.tracking.isDragging = true
             _onChange(value.fixingLocation(context.coordinator.tracking.trackingLocation))
           } else {
+            scrollController.unlockScrolling(direction: .vertical)
             context.coordinator.tracking.isDragging = false
           }
         }
@@ -180,7 +182,9 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
             context.coordinator.tracking.isDragging = true
             _onChange(value.fixingLocation(context.coordinator.tracking.trackingLocation))
           } else {
-            
+            scrollController.unlockScrolling(direction: .horizontal)
+            context.coordinator.tracking.isDragging = false
+
           }
           
         }
@@ -195,7 +199,9 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
             context.coordinator.tracking.isDragging = true
             _onChange(value.fixingLocation(context.coordinator.tracking.trackingLocation))
           } else {
-            
+            scrollController.unlockScrolling(direction: .horizontal)
+            context.coordinator.tracking.isDragging = false
+ 
           }
           
         }
@@ -231,17 +237,17 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
 
 }
 
-struct PanDirection: OptionSet {
-  let rawValue: Int
-
-  static let up = PanDirection(rawValue: 1 << 0)
-  static let down = PanDirection(rawValue: 1 << 1)
-  static let left = PanDirection(rawValue: 1 << 2)
-  static let right = PanDirection(rawValue: 1 << 3)
-
-}
-
 final class ScrollViewDragGestureRecognizer: UIPanGestureRecognizer {
+  
+  struct PanDirection: OptionSet {
+    let rawValue: Int
+    
+    static let up = PanDirection(rawValue: 1 << 0)
+    static let down = PanDirection(rawValue: 1 << 1)
+    static let left = PanDirection(rawValue: 1 << 2)
+    static let right = PanDirection(rawValue: 1 << 3)
+    
+  }
 
   weak var trackingScrollView: UIScrollView?
 
@@ -330,183 +336,9 @@ extension UIEvent {
 
 }
 
-final class ScrollController {
 
-  struct LockingDirection: OptionSet {
-    let rawValue: Int
-
-    static let vertical = LockingDirection(rawValue: 1 << 0)
-    static let horizontal = LockingDirection(rawValue: 1 << 1)
-  }
-
-  private var scrollObserver: NSKeyValueObservation!
-  private(set) var lockingDirection: LockingDirection = []
-  private var previousValue: CGPoint?
-  let scrollView: UIScrollView
-
-  init(scrollView: UIScrollView) {
-    self.scrollView = scrollView
-    scrollObserver = scrollView.observe(\.contentOffset, options: .old) {
-      [weak self, weak _scrollView = scrollView] scrollView, change in
-
-      guard let scrollView = _scrollView else { return }
-      guard let self = self else { return }
-      self.handleScrollViewEvent(scrollView: scrollView, change: change)
-    }
-  }
-
-  deinit {
-    endTracking()
-  }
-
-  func lockScrolling(direction: LockingDirection) {
-    lockingDirection.insert(direction)
-  }
-
-  func unlockScrolling(direction: LockingDirection) {
-    lockingDirection.remove(direction)
-  }
-
-  func setShowsVerticalScrollIndicator(_ flag: Bool) {
-    scrollView.showsVerticalScrollIndicator = flag
-  }
-
-  func endTracking() {
-    unlockScrolling(direction: [.vertical, .horizontal])
-    scrollObserver.invalidate()
-  }
-
-  func resetContentOffsetY() {
-    let contentInset = scrollView.adjustedContentInset
-    if scrollView.contentOffset.y < -contentInset.top {
-      setContentOffset(scrollView.contentOffsetToResetY)
-    }
-  }
-
-  func setContentOffset(_ offset: CGPoint) {
-    let previous = lockingDirection
-    lockingDirection = []
-    defer {
-      lockingDirection = previous
-    }
-    scrollView.contentOffset = offset
-  }
-
-  private func handleScrollViewEvent(
-    scrollView: UIScrollView,
-    change: NSKeyValueObservedChange<CGPoint>
-  ) {
-
-    // For debugging
-
-    guard let oldValue = change.oldValue else { return }
-
-    guard lockingDirection.isEmpty == false else {
-      return
-    }
-
-    //    guard scrollView.contentOffset != oldValue else { return }
-
-    guard oldValue != previousValue else { return }
-
-    previousValue = scrollView.contentOffset
-
-    var fixedOffset = scrollView.contentOffset
-
-    if lockingDirection.contains(.vertical) {
-      fixedOffset.y = oldValue.y
-    }
-
-    if lockingDirection.contains(.horizontal) {
-      fixedOffset.x = oldValue.x
-    }
-
-    scrollView.setContentOffset(fixedOffset, animated: false)
-  }
-
-}
-
-extension UIScrollView {
-
-  struct ScrollableEdge: OptionSet, CustomStringConvertible {
-
-    let rawValue: Int
-
-    static let top = ScrollableEdge(rawValue: 1 << 0)
-    static let bottom = ScrollableEdge(rawValue: 1 << 1)
-    static let left = ScrollableEdge(rawValue: 1 << 2)
-    static let right = ScrollableEdge(rawValue: 1 << 3)
-
-    var description: String {
-      var result: [String] = []
-      if contains(.top) {
-        result.append("top")
-      }
-      if contains(.bottom) {
-        result.append("bottom")
-      }
-      if contains(.left) {
-        result.append("left")
-      }
-      if contains(.right) {
-        result.append("right")
-      }
-      return result.joined(separator: ", ")
-    }
-  }
-
-  var scrollableEdges: ScrollableEdge {
-
-    var edges: ScrollableEdge = []
-
-    let contentInset: UIEdgeInsets = adjustedContentInset
-
-    // Top
-    if contentOffset.y > -contentInset.top {
-      edges.insert(.top)
-    }
-
-    // Left
-    if contentOffset.x > -contentInset.left {
-      edges.insert(.left)
-    }
-
-    // bottom
-    if contentOffset.y + bounds.height < (contentSize.height + contentInset.bottom) {
-      edges.insert(.bottom)
-    }
-
-    // right
-
-    if contentOffset.x + bounds.width < (contentSize.width + contentInset.right) {
-      edges.insert(.right)
-    }
-
-    return edges
-  }
-
-  //  func isScrollingToTop(includiesRubberBanding: Bool) -> Bool {
-  //    if includiesRubberBanding {
-  //      return contentOffset.y <= -adjustedContentInset.top
-  //    } else {
-  //      return contentOffset.y == -adjustedContentInset.top
-  //    }
-  //  }
-
-  //  func isScrollingDown() -> Bool {
-  //    return contentOffset.y > -adjustedContentInset.top
-  //  }
-
-  var contentOffsetToResetY: CGPoint {
-    let contentInset = self.adjustedContentInset
-    var contentOffset = contentOffset
-    contentOffset.y = -contentInset.top
-    return contentOffset
-  }
-
-}
-
-@available(iOS 18, *)#Preview("Scroll"){
+@available(iOS 18, *)
+#Preview("Scroll") {
   @Previewable @State var offset: CGSize = .zero
 
   ZStack {
