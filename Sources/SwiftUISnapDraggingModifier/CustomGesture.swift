@@ -101,6 +101,8 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
         
         let scrollableEdges = scrollView.scrollableEdges
         
+        print(scrollableEdges)
+        
         let panDirection = recognizer.panDirection
         
         if panDirection.contains(.up) {
@@ -390,7 +392,7 @@ extension UIScrollView {
     }
     
     // Left
-    if contentOffset.x < -contentInset.left {
+    if contentOffset.x > -contentInset.left {
       edges.insert(.left)
     }
     
