@@ -299,7 +299,6 @@ public struct SnapDraggingModifier: ViewModifier {
   private var _gesture: some UIGestureRecognizerRepresentable {
     CustomGesture(
       coordinateSpaceInDragging: .named(_CoordinateSpaceTag.transition),
-      coordinateSpaceInView: .named(_CoordinateSpaceTag.pointInView),
       onChange: { value in 
       
 //      if self.isActive || isInActivation(startLocation: value.startLocation) {
