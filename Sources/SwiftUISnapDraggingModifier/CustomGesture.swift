@@ -65,7 +65,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
           return false
         }
       }
-
+      
       //      switch configuration.scrollViewOption.scrollViewDetection {
       //      case .noTracking:
       //        return false
@@ -121,7 +121,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
       context.coordinator.tracking.beganPoint = context.converter.location(
         in: coordinateSpaceInDragging
       )
-
+      
       fallthrough
     case .changed:
 
@@ -170,27 +170,35 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
           }
         }
 
-        //        if panDirection.contains(.left) {
-        //
-        //          if scrollableEdges.contains(.right) == false {
-        //            scrollController.lockScrolling(direction: .horizontal)
-        //            _onChange(value)
-        //          } else {
-        //
-        //          }
-        //
-        //        }
-        //
-        //        if panDirection.contains(.right) {
-        //
-        //          if scrollableEdges.contains(.left) == false {
-        //            scrollController.lockScrolling(direction: .horizontal)
-        //            _onChange(value)
-        //          } else {
-        //
-        //          }
-        //
-        //        }
+        if panDirection.contains(.left) {
+          
+          if scrollableEdges.contains(.right) == false {
+            scrollController.lockScrolling(direction: .horizontal)
+            if context.coordinator.tracking.trackingLocation == .zero {
+              context.coordinator.tracking.trackingLocation = value.location
+            }
+            context.coordinator.tracking.isDragging = true
+            _onChange(value.fixingLocation(context.coordinator.tracking.trackingLocation))
+          } else {
+            
+          }
+          
+        }
+        
+        if panDirection.contains(.right) {
+          
+          if scrollableEdges.contains(.left) == false {
+            scrollController.lockScrolling(direction: .horizontal)
+            if context.coordinator.tracking.trackingLocation == .zero {
+              context.coordinator.tracking.trackingLocation = value.location
+            }
+            context.coordinator.tracking.isDragging = true
+            _onChange(value.fixingLocation(context.coordinator.tracking.trackingLocation))
+          } else {
+            
+          }
+          
+        }
 
       } else {
         context.coordinator.tracking.isDragging = true
@@ -507,59 +515,51 @@ extension UIScrollView {
 
       ScrollView([.horizontal, .vertical]) {
         Grid {
-          GridRow {
-            ForEach(0..<8) { _ in Color.primary.frame(width: 20, height: 20) }
-          }
-          GridRow {
-            ForEach(0..<8) { _ in Color.primary.frame(width: 20, height: 20) }
-          }
-          GridRow {
-            ForEach(0..<8) { _ in Color.primary.frame(width: 20, height: 20) }
-          }
-          GridRow {
-            ForEach(0..<8) { _ in Color.primary.frame(width: 20, height: 20) }
-          }
-          GridRow {
-            ForEach(0..<8) { _ in Color.primary.frame(width: 20, height: 20) }
-          }
-        }
-      }
-
-      ScrollView {
-        VStack {
-          ForEach(0..<20) { index in
-            HStack {
-              Spacer()
-              Button("Button") {
-
-              }
-              .tint(.primary)
-              Spacer()
+          ForEach(0..<8) { _ in
+            GridRow {
+              ForEach(0..<8) { _ in Color.teal.frame(width: 30, height: 30) }
             }
-            .padding(2)
           }
         }
+        .padding()
+        .background(Color.red)
       }
-      .contentMargins(10)
-      .background(Color.yellow.tertiary)
 
-      ScrollView(.horizontal) {
-        HStack {
-          ForEach(0..<5) { index in
-            HStack {
-              Spacer()
-              Button("Button") {
-
-              }
-              .tint(.primary)
-              Spacer()
-            }
-            .padding(4)
-            .padding(.vertical, 10)
-          }
-        }
-      }
-      .background(Color.yellow.tertiary)
+//      ScrollView {
+//        VStack {
+//          ForEach(0..<20) { index in
+//            HStack {
+//              Spacer()
+//              Button("Button") {
+//
+//              }
+//              .tint(.primary)
+//              Spacer()
+//            }
+//            .padding(2)
+//          }
+//        }
+//      }
+//      .contentMargins(10)
+//      .background(Color.yellow.tertiary)
+//
+//      ScrollView(.horizontal) {
+//        HStack {
+//          ForEach(0..<5) { index in
+//            HStack {
+//              Spacer()
+//              Button("Button") {
+//
+//              }
+//              .tint(.primary)
+//              Spacer()
+//            }
+//            .padding(4)
+//            .padding(.vertical, 10)
+//          }
+//        }
+//      }
+//      .background(Color.yellow.tertiary)
     }
     .frame(width: 200, height: 200)
     .background(Color.green.secondary)
