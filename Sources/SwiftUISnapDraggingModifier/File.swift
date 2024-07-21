@@ -48,6 +48,7 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
               handler: .init(
                 onEndDragging: { velocity, offset, contentSize in
 
+                  print(velocity, offset)
                   if velocity.dy > 50 || offset.height > (contentSize.width / 2) {
                     isPresented = false
                     return .init(width: 0, height: hidingOffset)
@@ -107,11 +108,12 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
               
               ScrollView {
                 VStack {
-                  Text("Vertical ScrollView")
-                  Text("Vertical ScrollView")
-                  Text("Vertical ScrollView")
+                  ForEach(0..<50) { index in
+                    Text("Hello, World!")
+                  }
                 }
               }
+              .frame(height: 300)
             }
             
             ScrollView(.horizontal) {

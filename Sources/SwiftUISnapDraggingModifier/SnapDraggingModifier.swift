@@ -304,13 +304,12 @@ public struct SnapDraggingModifier: ViewModifier {
 //      if self.isActive || isInActivation(startLocation: value.startLocation) {
 //        
 //        self.isActive = true
-                
+                        
         let resolvedTranslation = CGSize(
           width: (value.location.x - pointInView.x),
           height: (value.location.y - pointInView.y)
         )
-        
-        
+
         // TODO: stop the current animation when dragging restarted.
         withAnimation(.interactiveSpring()) {
           if axis.contains(.horizontal) {
@@ -354,7 +353,7 @@ public struct SnapDraggingModifier: ViewModifier {
       }
     )
     .onChanged({ value in
-      
+                  
       if self.isActive || isInActivation(startLocation: value.startLocation) {
         
         self.isActive = true
