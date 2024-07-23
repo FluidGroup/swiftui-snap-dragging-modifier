@@ -6,6 +6,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
   struct Value: Equatable {
 
     let beganPoint: CGPoint
+    let translation: CGSize
     let location: CGPoint
     var velocity: CGSize
 
@@ -15,6 +16,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
 
       return Value(
         beganPoint: beganPoint,
+        translation: translation,
         location: .init(x: location.x - subDistance.width, y: location.y - subDistance.height),
         velocity: velocity
       )
@@ -127,6 +129,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
 
       let value = Value(
         beganPoint: context.coordinator.tracking.beganPoint,
+        translation: { .init(width: $0.x, height: $0.y) }(recognizer.translation(in: nil)),
         location: context.converter.location(in: coordinateSpaceInDragging),
         velocity: { .init(width: $0.x, height: $0.y) }(
           context.converter.velocity(in: coordinateSpaceInDragging) ?? .zero
@@ -215,6 +218,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
 
       var value = Value(
         beganPoint: context.coordinator.tracking.beganPoint,
+        translation: { .init(width: $0.x, height: $0.y) }(recognizer.translation(in: nil)),
         location: context.converter.location(in: coordinateSpaceInDragging),
         velocity: { .init(width: $0.x, height: $0.y) }(
           context.converter.velocity(in: coordinateSpaceInDragging) ?? .zero

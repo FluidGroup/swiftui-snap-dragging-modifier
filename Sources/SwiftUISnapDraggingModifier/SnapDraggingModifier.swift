@@ -106,6 +106,9 @@ public struct SnapDraggingModifier: ViewModifier {
    https://stackoverflow.com/questions/72880712/animate-gesturestate-on-reset
    */
   @Binding private var currentOffset: CGSize
+  
+  @State private var presentingOffset: CGSize = .zero
+  
   @State private var targetOffset: CGSize = .zero
   
   @GestureState private var isTracking = false
@@ -147,8 +150,7 @@ public struct SnapDraggingModifier: ViewModifier {
   
   public func body(content: Content) -> some View {
     
-    let base =
-    content
+    let base = content
       .coordinateSpace(name: _CoordinateSpaceTag.pointInView)
       .measureSize($contentSize)
       .onChange(of: isTracking) { newValue in
@@ -158,10 +160,13 @@ public struct SnapDraggingModifier: ViewModifier {
           self.onEnded(velocity: .zero)
         }
       }
+//      .overlay { 
+//        Text("\(presentingOffset.debugDescription)")
+//      }
     
     let addingGesture = dragGesture.simultaneously(with: gesture)
     
-    if #available(iOS 18, *) {
+    if false, #available(iOS 18, *) {
       
       Group {
         switch gestureMode {
@@ -177,7 +182,9 @@ public struct SnapDraggingModifier: ViewModifier {
 //            .highPriorityGesture(addingGesture, including: .all)
         }
       }
-      .animatableOffset(x: currentOffset.width, y: currentOffset.height)
+      ._animatableOffset(x: currentOffset.width, presenting: $presentingOffset.width)
+      ._animatableOffset(y: currentOffset.height, presenting: $presentingOffset.height)
+      
       .coordinateSpace(name: _CoordinateSpaceTag.transition)
       .onChange(of: isTracking) { newValue in
         if newValue {
@@ -197,7 +204,9 @@ public struct SnapDraggingModifier: ViewModifier {
             .highPriorityGesture(addingGesture, including: .all)
         }
       }
-      .animatableOffset(x: currentOffset.width, y: currentOffset.height)
+      ._animatableOffset(x: currentOffset.width, presenting: $presentingOffset.width)
+      ._animatableOffset(y: currentOffset.height, presenting: $presentingOffset.height)
+      
       .coordinateSpace(name: _CoordinateSpaceTag.transition)
       .onChange(of: isTracking) { newValue in
         if newValue {
@@ -297,7 +306,7 @@ public struct SnapDraggingModifier: ViewModifier {
   @available(watchOS, unavailable)
   @available(visionOS, unavailable)
   private var _gesture: some UIGestureRecognizerRepresentable {
-    CustomGesture(
+    return CustomGesture(
       coordinateSpaceInDragging: .named(_CoordinateSpaceTag.transition),
       onChange: { value in 
       
@@ -305,10 +314,12 @@ public struct SnapDraggingModifier: ViewModifier {
 //        
 //        self.isActive = true
                         
-        let resolvedTranslation = CGSize(
-          width: (value.location.x - pointInView.x),
-          height: (value.location.y - pointInView.y)
-        )
+//        let resolvedTranslation = CGSize(
+//          width: (value.location.x - pointInView.x),
+//          height: (value.location.y - pointInView.y)
+//        )
+        
+        let resolvedTranslation = value.translation
 
         // TODO: stop the current animation when dragging restarted.
         withAnimation(.interactiveSpring()) {
@@ -359,7 +370,7 @@ public struct SnapDraggingModifier: ViewModifier {
         self.isActive = true
         
         // TODO: including minimumDistance
-        
+                
         let resolvedTranslation = CGSize(
           width: (value.location.x - pointInView.x),
           height: (value.location.y - pointInView.y)
