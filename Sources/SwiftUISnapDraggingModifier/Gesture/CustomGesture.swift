@@ -5,29 +5,10 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
 
   struct Value: Equatable {
 
-    let beganPoint: CGPoint
     let translation: CGSize
     let location: CGPoint
     var velocity: CGSize
-    
-    consuming func applyTranslationOffset(_ offset: CGSize) -> Value {
-      return Value(
-        beganPoint: beganPoint,
-        translation: .init(width: translation.width - offset.width, height: translation.height - offset.height),
-        location: location,
-        velocity: velocity
-      )
-    }
-    
-    consuming func swapTranslation(_ translation: CGSize) -> Value {
-      return Value(
-        beganPoint: beganPoint,
-        translation: translation,
-        location: location,
-        velocity: velocity
-      )
-    }
-   
+          
   }
 
   struct Configuration {
@@ -37,9 +18,9 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
   final class Coordinator: NSObject, UIGestureRecognizerDelegate {
 
     struct Tracking {
-      var isDragging: Bool = false
+      var isDraggingX: Bool = false
+      var isDraggingY: Bool = false
       var beganPoint: CGPoint = .zero
-      var translationOffset: CGSize = .zero
       var currentScrollController: ScrollController?
       var trackingLocation: CGPoint = .zero
       var translation: CGSize = .zero
@@ -135,15 +116,16 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
       
       fallthrough
     case .changed:
-
-      let value = Value(
-        beganPoint: context.coordinator.tracking.beganPoint,
-        translation: { .init(width: $0.x, height: $0.y) }(recognizer.translation(in: nil)),
-        location: context.converter.location(in: coordinateSpaceInDragging),
-        velocity: { .init(width: $0.x, height: $0.y) }(
-          context.converter.velocity(in: coordinateSpaceInDragging) ?? .zero
+         
+      func makeValue(translation: CGSize) -> Value {
+        return Value(
+          translation: translation,
+          location: context.converter.location(in: coordinateSpaceInDragging),
+          velocity: { .init(width: $0.x, height: $0.y) }(
+            context.converter.velocity(in: coordinateSpaceInDragging) ?? .zero
+          )
         )
-      )
+      }
 
       if let scrollView = recognizer.trackingScrollView {
 
@@ -156,54 +138,35 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
 
         if panDirection.contains(.up) {
           
-          print("UP")
-
           if scrollableEdges.contains(.bottom) == false {
-            scrollController.lockScrolling(direction: .vertical)           
-            if context.coordinator.tracking.translationOffset == .zero {
-              context.coordinator.tracking.translationOffset = value.translation
-            }
-            context.coordinator.tracking.isDragging = true
+            
+            scrollController.lockScrolling(direction: .vertical)                      
+            context.coordinator.tracking.isDraggingY = true
             
             context.coordinator.tracking.translation.height += diff.y
             
-            _onChange(
-              value
-                .applyTranslationOffset(context.coordinator.tracking.translationOffset)
-                .swapTranslation(context.coordinator.tracking.translation)
-            )
+            _onChange(makeValue(translation: context.coordinator.tracking.translation))
           } else {
-            context.coordinator.tracking.translationOffset = .zero
             scrollController.unlockScrolling(direction: .vertical)
-            context.coordinator.tracking.isDragging = false
+            context.coordinator.tracking.isDraggingY = false
           }
 
         }
 
         if panDirection.contains(.down) {
-          
-          print("DOWN")
-          
+                    
           if scrollableEdges.contains(.top) == false {
             scrollController.lockScrolling(direction: .vertical)
-            if context.coordinator.tracking.trackingLocation == .zero {
-              context.coordinator.tracking.trackingLocation = value.location
-            }
-            if context.coordinator.tracking.translationOffset == .zero {
-              context.coordinator.tracking.translationOffset = value.translation
-            }
             
             context.coordinator.tracking.translation.height += diff.y
                         
-            context.coordinator.tracking.isDragging = true
-            _onChange(
-              value
-                .applyTranslationOffset(context.coordinator.tracking.translationOffset)
-                .swapTranslation(context.coordinator.tracking.translation)
-            )
+            context.coordinator.tracking.isDraggingY = true
+            
+            _onChange(makeValue(translation: context.coordinator.tracking.translation))
+
           } else {
             scrollController.unlockScrolling(direction: .vertical)
-            context.coordinator.tracking.isDragging = false
+            context.coordinator.tracking.isDraggingY = false
           }
         }
 
@@ -211,21 +174,15 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
           
           if scrollableEdges.contains(.right) == false {
             scrollController.lockScrolling(direction: .horizontal)        
-            if context.coordinator.tracking.translationOffset == .zero {
-              context.coordinator.tracking.translationOffset = value.translation
-            }
-            context.coordinator.tracking.isDragging = true
+            context.coordinator.tracking.isDraggingX = true
             
             context.coordinator.tracking.translation.width += diff.x
             
-            _onChange(
-              value
-                .applyTranslationOffset(context.coordinator.tracking.translationOffset)
-                .swapTranslation(context.coordinator.tracking.translation)
-            )
+            _onChange(makeValue(translation: context.coordinator.tracking.translation))
+
           } else {
             scrollController.unlockScrolling(direction: .horizontal)
-            context.coordinator.tracking.isDragging = false
+            context.coordinator.tracking.isDraggingX = false
 
           }
           
@@ -235,50 +192,48 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
           
           if scrollableEdges.contains(.left) == false {
             scrollController.lockScrolling(direction: .horizontal)
-            if context.coordinator.tracking.translationOffset == .zero {
-              context.coordinator.tracking.translationOffset = value.translation
-            }
-            context.coordinator.tracking.isDragging = true
+            context.coordinator.tracking.isDraggingX = true
             
             context.coordinator.tracking.translation.width += diff.x
             
-            _onChange(
-              value
-                .applyTranslationOffset(context.coordinator.tracking.translationOffset)
-                .swapTranslation(context.coordinator.tracking.translation)
-            )
+            _onChange(makeValue(translation: context.coordinator.tracking.translation))
+
           } else {
             scrollController.unlockScrolling(direction: .horizontal)
-            context.coordinator.tracking.isDragging = false
+            context.coordinator.tracking.isDraggingX = false
  
           }
           
         }
 
       } else {
-        context.coordinator.tracking.translationOffset = .zero
-        context.coordinator.tracking.isDragging = true
-        _onChange(value)
+        context.coordinator.tracking.isDraggingX = true
+        context.coordinator.tracking.isDraggingY = true
+
+        _onChange(makeValue(translation: context.coordinator.tracking.translation))
+
       }
 
     case .ended, .cancelled, .failed:
 
       var value = Value(
-        beganPoint: context.coordinator.tracking.beganPoint,
-        translation: { .init(width: $0.x, height: $0.y) }(recognizer.translation(in: nil)),
+        translation: context.coordinator.tracking.translation,
         location: context.converter.location(in: coordinateSpaceInDragging),
         velocity: { .init(width: $0.x, height: $0.y) }(
           context.converter.velocity(in: coordinateSpaceInDragging) ?? .zero
         )
       )
-
-      if context.coordinator.tracking.isDragging == false {
-        value.velocity = .zero
+      
+      if context.coordinator.tracking.isDraggingX == false {
+        value.velocity.width = 0
+      }
+      
+      if context.coordinator.tracking.isDraggingY == false {
+        value.velocity.height = 0
       }
 
       _onEnd(
-        value
-          .applyTranslationOffset(context.coordinator.tracking.translationOffset)
+        value         
       )
 
       context.coordinator.purgeTrakingState()
