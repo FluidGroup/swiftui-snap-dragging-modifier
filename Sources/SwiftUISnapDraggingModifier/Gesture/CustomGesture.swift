@@ -1,32 +1,42 @@
 import SwiftUI
 
 @available(iOS 18, *)
-struct CustomGesture: UIGestureRecognizerRepresentable {
+public struct CustomGesture: UIGestureRecognizerRepresentable {
 
-  struct Value: Equatable {
+  public struct Value: Equatable {
 
-    let translation: CGSize
-    let location: CGPoint
-    var velocity: CGSize
+    public let translation: CGSize
+    public let location: CGPoint
+    fileprivate(set) public var velocity: CGSize
           
   }
 
-  struct Configuration {
-    var ignoresScrollView: Bool
+  public struct Configuration {
+    
+    public var ignoresScrollView: Bool
+    public var sticksToEdges: Bool
+    
+    public init(
+      ignoresScrollView: Bool,
+      sticksToEdges: Bool
+    ) {
+      self.ignoresScrollView = ignoresScrollView
+      self.sticksToEdges = sticksToEdges
+    }
   }
 
-  final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+  public final class Coordinator: NSObject, UIGestureRecognizerDelegate {
 
     struct Tracking {
       var isDraggingX: Bool = false
       var isDraggingY: Bool = false
-      var beganPoint: CGPoint = .zero
       var currentScrollController: ScrollController?
-      var trackingLocation: CGPoint = .zero
       var translation: CGSize = .zero
+      var stickingEdges: UIScrollView.ScrollableEdge = []
     }
 
     var tracking: Tracking = .init()
+    
     private let configuration: Configuration
 
     init(configuration: Configuration) {
@@ -38,12 +48,12 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
     }
 
     @objc
-    func gestureRecognizer(
+    public func gestureRecognizer(
       _ gestureRecognizer: UIGestureRecognizer,
       shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
 
-      guard let _gestureRecognizer = gestureRecognizer as? ScrollViewDragGestureRecognizer else {
+      guard let _gestureRecognizer = gestureRecognizer as? _ScrollViewDragGestureRecognizer else {
         assertionFailure("\(gestureRecognizer)")
         return false
       }
@@ -78,8 +88,8 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
   private let _onEnd: (Value) -> Void
   private let configuration: Configuration
 
-  init(
-    configuration: Configuration = .init(ignoresScrollView: false),
+  public init(
+    configuration: Configuration = .init(ignoresScrollView: false, sticksToEdges: true),
     coordinateSpaceInDragging: CoordinateSpaceProtocol,
     onChange: @escaping (Value) -> Void,
     onEnd: @escaping (Value) -> Void
@@ -90,18 +100,18 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
     self._onEnd = onEnd
   }
 
-  func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+  public func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
     return .init(configuration: configuration)
   }
 
-  func makeUIGestureRecognizer(context: Context) -> ScrollViewDragGestureRecognizer {
-    let gesture = ScrollViewDragGestureRecognizer()
+  public func makeUIGestureRecognizer(context: Context) -> _ScrollViewDragGestureRecognizer {
+    let gesture = _ScrollViewDragGestureRecognizer()
     gesture.delegate = context.coordinator
     return gesture
   }
 
-  func handleUIGestureRecognizerAction(
-    _ recognizer: ScrollViewDragGestureRecognizer,
+  public func handleUIGestureRecognizerAction(
+    _ recognizer: _ScrollViewDragGestureRecognizer,
     context: Context
   ) {
 
@@ -109,11 +119,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
     case .possible:
       break
     case .began:
-
-      context.coordinator.tracking.beganPoint = context.converter.location(
-        in: coordinateSpaceInDragging
-      )
-      
+        
       fallthrough
     case .changed:
          
@@ -130,80 +136,112 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
       if let scrollView = recognizer.trackingScrollView {
 
         let scrollController = ScrollController(scrollView: scrollView)
+        
         context.coordinator.tracking.currentScrollController = scrollController
 
         let scrollableEdges = scrollView.scrollableEdges
 
         let (panDirection, diff) = recognizer.panDirection
-
-        if panDirection.contains(.up) {
+        
+        // handling scrolling in scrollview
+        do {
           
-          if scrollableEdges.contains(.bottom) == false {
+          if panDirection.contains(.up) {
             
-            scrollController.lockScrolling(direction: .vertical)                      
-            context.coordinator.tracking.isDraggingY = true
+            if scrollableEdges.contains(.bottom) == false || configuration.sticksToEdges && context.coordinator.tracking.stickingEdges.contains(.top) {
+              
+              scrollController.lockScrolling(direction: .vertical)     
+              
+              if configuration.sticksToEdges && context.coordinator.tracking.stickingEdges.contains(.top) == false {
+                scrollController.scrollTo(edge: .bottom)
+              }
+              
+              context.coordinator.tracking.isDraggingY = true
+              
+              context.coordinator.tracking.translation.height += diff.y
+              context.coordinator.tracking.stickingEdges.insert(.bottom)              
+              _onChange(makeValue(translation: context.coordinator.tracking.translation))
+            } else {
+                            
+              scrollController.unlockScrolling(direction: .vertical)
+              context.coordinator.tracking.isDraggingY = false
+              
+            }
             
-            context.coordinator.tracking.translation.height += diff.y
-            
-            _onChange(makeValue(translation: context.coordinator.tracking.translation))
-          } else {
-            scrollController.unlockScrolling(direction: .vertical)
-            context.coordinator.tracking.isDraggingY = false
-          }
-
-        }
-
-        if panDirection.contains(.down) {
-                    
-          if scrollableEdges.contains(.top) == false {
-            scrollController.lockScrolling(direction: .vertical)
-            
-            context.coordinator.tracking.translation.height += diff.y
-                        
-            context.coordinator.tracking.isDraggingY = true
-            
-            _onChange(makeValue(translation: context.coordinator.tracking.translation))
-
-          } else {
-            scrollController.unlockScrolling(direction: .vertical)
-            context.coordinator.tracking.isDraggingY = false
-          }
-        }
-
-        if panDirection.contains(.left) {
-          
-          if scrollableEdges.contains(.right) == false {
-            scrollController.lockScrolling(direction: .horizontal)        
-            context.coordinator.tracking.isDraggingX = true
-            
-            context.coordinator.tracking.translation.width += diff.x
-            
-            _onChange(makeValue(translation: context.coordinator.tracking.translation))
-
-          } else {
-            scrollController.unlockScrolling(direction: .horizontal)
-            context.coordinator.tracking.isDraggingX = false
-
           }
           
-        }
-
-        if panDirection.contains(.right) {
-          
-          if scrollableEdges.contains(.left) == false {
-            scrollController.lockScrolling(direction: .horizontal)
-            context.coordinator.tracking.isDraggingX = true
+          if panDirection.contains(.down) {
             
-            context.coordinator.tracking.translation.width += diff.x
-            
-            _onChange(makeValue(translation: context.coordinator.tracking.translation))
-
-          } else {
-            scrollController.unlockScrolling(direction: .horizontal)
-            context.coordinator.tracking.isDraggingX = false
- 
+            if scrollableEdges.contains(.top) == false || configuration.sticksToEdges && context.coordinator.tracking.stickingEdges.contains(.bottom) {
+              
+              scrollController.lockScrolling(direction: .vertical)
+              
+              if configuration.sticksToEdges && context.coordinator.tracking.stickingEdges.contains(.bottom) == false {
+                scrollController.scrollTo(edge: .top)
+              }
+              
+              context.coordinator.tracking.translation.height += diff.y
+              
+              context.coordinator.tracking.isDraggingY = true
+              context.coordinator.tracking.stickingEdges.insert(.top)              
+              
+              _onChange(makeValue(translation: context.coordinator.tracking.translation))
+              
+            } else {
+              scrollController.unlockScrolling(direction: .vertical)
+              context.coordinator.tracking.isDraggingY = false
+            }
           }
           
+          if panDirection.contains(.left) {
+            
+            if scrollableEdges.contains(.right) == false || configuration.sticksToEdges && context.coordinator.tracking.stickingEdges.contains(.left) {
+              
+              scrollController.lockScrolling(direction: .horizontal)    
+              
+              if configuration.sticksToEdges && context.coordinator.tracking.stickingEdges.contains(.left) == false {
+                scrollController.scrollTo(edge: .right)
+              }
+                            
+              context.coordinator.tracking.isDraggingX = true
+              
+              context.coordinator.tracking.translation.width += diff.x
+              context.coordinator.tracking.stickingEdges.insert(.right)
+              
+              _onChange(makeValue(translation: context.coordinator.tracking.translation))
+              
+            } else {
+              scrollController.unlockScrolling(direction: .horizontal)
+              context.coordinator.tracking.isDraggingX = false
+              
+            }
+            
+          }
+          
+          if panDirection.contains(.right) {
+            
+            if scrollableEdges.contains(.left) == false || configuration.sticksToEdges && context.coordinator.tracking.stickingEdges.contains(.right) {
+              
+              scrollController.lockScrolling(direction: .horizontal)
+              
+              if configuration.sticksToEdges && context.coordinator.tracking.stickingEdges.contains(.right) == false {
+                scrollController.scrollTo(edge: .left)
+              }
+              
+              context.coordinator.tracking.isDraggingX = true
+              
+              context.coordinator.tracking.translation.width += diff.x
+              context.coordinator.tracking.stickingEdges.insert(.left)
+              
+              _onChange(makeValue(translation: context.coordinator.tracking.translation))
+              
+            } else {
+              scrollController.unlockScrolling(direction: .horizontal)
+              context.coordinator.tracking.isDraggingX = false
+              
+            }
+            
+          }
         }
 
       } else {
@@ -246,7 +284,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
 
 }
 
-final class ScrollViewDragGestureRecognizer: UIPanGestureRecognizer {
+public final class _ScrollViewDragGestureRecognizer: UIPanGestureRecognizer {
   
   struct PanDirection: OptionSet {
     let rawValue: Int
@@ -292,22 +330,22 @@ final class ScrollViewDragGestureRecognizer: UIPanGestureRecognizer {
     return (direction, diff)
   }
 
-  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+  public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
     trackingScrollView = event.findVerticalScrollView()
     previousTranslation = .zero
     super.touchesBegan(touches, with: event)
   }
 
-  override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+  public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
 
     super.touchesMoved(touches, with: event)
   }
 
-  override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+  public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
     super.touchesEnded(touches, with: event)
   }
 
-  override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+  public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
     super.touchesCancelled(touches, with: event)
   }
 
@@ -328,13 +366,6 @@ extension UIEvent {
           return false
         }
 
-        //        func isHorizontal(scrollView: UIScrollView) -> Bool {
-        //
-        //          let contentInset: UIEdgeInsets = scrollView.adjustedContentInset
-        //
-        //          return (scrollView.bounds.width - (contentInset.right + contentInset.left) < scrollView.contentSize.width)
-        //        }
-
         func isScrollable(scrollView: UIScrollView) -> Bool {
 
           let contentInset: UIEdgeInsets = scrollView.adjustedContentInset
@@ -346,7 +377,7 @@ extension UIEvent {
               <= scrollView.contentSize.height)
         }
 
-        return isScrollable(scrollView: scrollView)  // && !isHorizontal(scrollView: scrollView)
+        return isScrollable(scrollView: scrollView)
       }
 
     return (scrollView as? UIScrollView)
@@ -354,6 +385,22 @@ extension UIEvent {
 
 }
 
+#if DEBUG
+
+@available(iOS 18, *)
+private var scrollView: some View {
+  ScrollView([.horizontal, .vertical]) {
+    Grid {
+      ForEach(0..<8) { _ in
+        GridRow {
+          ForEach(0..<8) { _ in Color.teal.frame(width: 30, height: 30) }
+        }
+      }
+    }
+    .padding()
+    .background(Color.red)
+  }
+}
 
 @available(iOS 18, *)
 #Preview("Scroll") {
@@ -362,54 +409,7 @@ extension UIEvent {
   ZStack {
 
     VStack {
-
-      ScrollView([.horizontal, .vertical]) {
-        Grid {
-          ForEach(0..<8) { _ in
-            GridRow {
-              ForEach(0..<8) { _ in Color.teal.frame(width: 30, height: 30) }
-            }
-          }
-        }
-        .padding()
-        .background(Color.red)
-      }
-
-//      ScrollView {
-//        VStack {
-//          ForEach(0..<20) { index in
-//            HStack {
-//              Spacer()
-//              Button("Button") {
-//
-//              }
-//              .tint(.primary)
-//              Spacer()
-//            }
-//            .padding(2)
-//          }
-//        }
-//      }
-//      .contentMargins(10)
-//      .background(Color.yellow.tertiary)
-//
-//      ScrollView(.horizontal) {
-//        HStack {
-//          ForEach(0..<5) { index in
-//            HStack {
-//              Spacer()
-//              Button("Button") {
-//
-//              }
-//              .tint(.primary)
-//              Spacer()
-//            }
-//            .padding(4)
-//            .padding(.vertical, 10)
-//          }
-//        }
-//      }
-//      .background(Color.yellow.tertiary)
+      scrollView
     }
     .frame(width: 200, height: 200)
     .background(Color.green.secondary)
@@ -420,3 +420,5 @@ extension UIEvent {
 
   }
 }
+
+#endif

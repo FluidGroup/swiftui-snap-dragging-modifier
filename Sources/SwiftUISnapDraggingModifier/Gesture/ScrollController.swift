@@ -1,6 +1,14 @@
 import UIKit
 
+@MainActor
 final class ScrollController {
+  
+  enum Edge {
+    case top
+    case bottom
+    case left
+    case right
+  }
   
   struct LockingDirection: OptionSet {
     let rawValue: Int
@@ -21,12 +29,17 @@ final class ScrollController {
       
       guard let scrollView = _scrollView else { return }
       guard let self = self else { return }
-      self.handleScrollViewEvent(scrollView: scrollView, change: change)
+      
+      MainActor.assumeIsolated {
+        self.handleScrollViewEvent(scrollView: scrollView, change: change)
+      }
     }
   }
   
   deinit {
-    endTracking()
+    MainActor.assumeIsolated {
+      endTracking()
+    }
   }
   
   func lockScrolling(direction: LockingDirection) {
@@ -44,6 +57,23 @@ final class ScrollController {
   func endTracking() {
     unlockScrolling(direction: [.vertical, .horizontal])
     scrollObserver.invalidate()
+  }
+  
+  func scrollTo(edge: Edge) {
+    let contentInset = scrollView.adjustedContentInset
+    let contentOffset = scrollView.contentOffset
+    var offset = contentOffset
+    switch edge {
+    case .top:
+      offset.y = -contentInset.top
+    case .bottom:
+      offset.y = scrollView.contentSize.height - scrollView.bounds.height + contentInset.bottom
+    case .left:
+      offset.x = -contentInset.left
+    case .right:
+      offset.x = scrollView.contentSize.width - scrollView.bounds.width + contentInset.right
+    }
+    setContentOffset(offset)
   }
   
   func resetContentOffsetY() {
