@@ -107,10 +107,12 @@ public struct SnapDraggingModifier: ViewModifier {
    */
   @Binding private var currentOffset: CGSize
   
+  // value for animating
   @State private var presentingOffset: CGSize = .zero
   
   @State private var targetOffset: CGSize = .zero
-  
+
+  @GestureState private var initialOffset: CGSize?  
   @GestureState private var isTracking = false
   @GestureState private var pointInView: CGPoint = .zero
   
@@ -160,13 +162,13 @@ public struct SnapDraggingModifier: ViewModifier {
           self.onEnded(velocity: .zero)
         }
       }
-//      .overlay { 
-//        Text("\(presentingOffset.debugDescription)")
-//      }
+      .overlay { 
+        Text("\(presentingOffset.debugDescription)")
+      }
     
     let addingGesture = dragGesture.simultaneously(with: gesture)
     
-    if false, #available(iOS 18, *) {
+    if true, #available(iOS 18, *) {
       
       Group {
         switch gestureMode {
@@ -306,6 +308,9 @@ public struct SnapDraggingModifier: ViewModifier {
   @available(watchOS, unavailable)
   @available(visionOS, unavailable)
   private var _gesture: some UIGestureRecognizerRepresentable {
+          
+    let baseOffset = presentingOffset
+    
     return CustomGesture(
       coordinateSpaceInDragging: .named(_CoordinateSpaceTag.transition),
       onChange: { value in 
@@ -313,19 +318,17 @@ public struct SnapDraggingModifier: ViewModifier {
 //      if self.isActive || isInActivation(startLocation: value.startLocation) {
 //        
 //        self.isActive = true
-                        
-//        let resolvedTranslation = CGSize(
-//          width: (value.location.x - pointInView.x),
-//          height: (value.location.y - pointInView.y)
-//        )
+                                        
+        let proposedOffset = CGSize(
+          width: baseOffset.width + value.translation.width,
+          height: baseOffset.height + value.translation.height
+        )  
         
-        let resolvedTranslation = value.translation
-
         // TODO: stop the current animation when dragging restarted.
         withAnimation(.interactiveSpring()) {
           if axis.contains(.horizontal) {
             currentOffset.width = rubberBand(
-              value: resolvedTranslation.width,
+              value: proposedOffset.width,
               min: horizontalBoundary.min,
               max: horizontalBoundary.max,
               bandLength: horizontalBoundary.bandLength
@@ -333,7 +336,7 @@ public struct SnapDraggingModifier: ViewModifier {
           }
           if axis.contains(.vertical) {
             currentOffset.height = rubberBand(
-              value: resolvedTranslation.height,
+              value: proposedOffset.height,
               min: verticalBoundary.min,
               max: verticalBoundary.max,
               bandLength: verticalBoundary.bandLength
@@ -356,7 +359,12 @@ public struct SnapDraggingModifier: ViewModifier {
     DragGesture(
       minimumDistance: activation.minimumDistance,
       coordinateSpace: .named(_CoordinateSpaceTag.transition)
-    )    
+    )        
+    .updating($initialOffset, body: { _, state, _ in 
+      if state == nil {
+        state = presentingOffset
+      }
+    })
     .updating(
       $isTracking,
       body: { _, state, _ in
@@ -370,17 +378,20 @@ public struct SnapDraggingModifier: ViewModifier {
         self.isActive = true
         
         // TODO: including minimumDistance
-                
-        let resolvedTranslation = CGSize(
-          width: (value.location.x - pointInView.x),
-          height: (value.location.y - pointInView.y)
-        )
+         
+        // Because of GestureState, this value is set always.
+        let baseOffset = initialOffset!
+        
+        let proposedOffset = CGSize(
+          width: baseOffset.width + value.translation.width,
+          height: baseOffset.height + value.translation.height
+        )    
         
         // TODO: stop the current animation when dragging restarted.
         withAnimation(.interactiveSpring()) {
           if axis.contains(.horizontal) {
             currentOffset.width = rubberBand(
-              value: resolvedTranslation.width,
+              value: proposedOffset.width,
               min: horizontalBoundary.min,
               max: horizontalBoundary.max,
               bandLength: horizontalBoundary.bandLength
@@ -388,7 +399,7 @@ public struct SnapDraggingModifier: ViewModifier {
           }
           if axis.contains(.vertical) {
             currentOffset.height = rubberBand(
-              value: resolvedTranslation.height,
+              value: proposedOffset.height,
               min: verticalBoundary.min,
               max: verticalBoundary.max,
               bandLength: verticalBoundary.bandLength
@@ -543,7 +554,8 @@ struct Joystick: View {
         .modifier(
           SnapDraggingModifier(
             offset: $offset,
-            springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1)
+            activation: .init(minimumDistance: 0),
+            springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1)            
           )
         )
       Circle()
