@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		4B5794852C4FC44B000BC6F9 /* SwiftUISnapDraggingModifier in Frameworks */ = {isa = PBXBuildFile; productRef = 4B5794842C4FC44B000BC6F9 /* SwiftUISnapDraggingModifier */; };
+		4BCD74E42C51692C00073BFD /* SwiftUIScrollViewInteroperableDragGesture in Frameworks */ = {isa = PBXBuildFile; productRef = 4BCD74E32C51692C00073BFD /* SwiftUIScrollViewInteroperableDragGesture */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +25,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4B5794852C4FC44B000BC6F9 /* SwiftUISnapDraggingModifier in Frameworks */,
+				4BCD74E42C51692C00073BFD /* SwiftUIScrollViewInteroperableDragGesture in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,6 +69,7 @@
 			name = Development;
 			packageProductDependencies = (
 				4B5794842C4FC44B000BC6F9 /* SwiftUISnapDraggingModifier */,
+				4BCD74E32C51692C00073BFD /* SwiftUIScrollViewInteroperableDragGesture */,
 			);
 			productName = Development;
 			productReference = 4B5794722C4FC3F2000BC6F9 /* Development.app */;
@@ -98,6 +101,7 @@
 			mainGroup = 4B5794692C4FC3F2000BC6F9;
 			packageReferences = (
 				4B5794832C4FC44B000BC6F9 /* XCLocalSwiftPackageReference "../../swiftui-snap-dragging-modifier" */,
+				4BCD74E22C51692C00073BFD /* XCLocalSwiftPackageReference "../submodules/swiftui-scrollview-interoperable-drag-gesture" */,
 			);
 			productRefGroup = 4B5794732C4FC3F2000BC6F9 /* Products */;
 			projectDirPath = "";
@@ -334,12 +338,20 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../../swiftui-snap-dragging-modifier";
 		};
+		4BCD74E22C51692C00073BFD /* XCLocalSwiftPackageReference "../submodules/swiftui-scrollview-interoperable-drag-gesture" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../submodules/swiftui-scrollview-interoperable-drag-gesture";
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		4B5794842C4FC44B000BC6F9 /* SwiftUISnapDraggingModifier */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SwiftUISnapDraggingModifier;
+		};
+		4BCD74E32C51692C00073BFD /* SwiftUIScrollViewInteroperableDragGesture */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SwiftUIScrollViewInteroperableDragGesture;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -44,6 +44,7 @@ struct Joystick: View {
         .frame(width: 100, height: 100)
         .modifier(
           SnapDraggingModifier(
+            gestureMode: .normal,
             offset: $offset,
             springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1)
           )

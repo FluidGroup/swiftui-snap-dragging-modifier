@@ -41,6 +41,13 @@ public struct SheetModifier<DisplayContent: View>: ViewModifier {
           .fixedSize(horizontal: false, vertical: true)
           .modifier(
             SnapDraggingModifier(
+              gestureMode: {
+                if #available(iOS 18.0, *) {
+                  return .scrollViewInteroperable(.init(ignoresScrollView: false, sticksToEdges: true))
+                } else {
+                  return .normal
+                }
+              }(),
               offset: $contentOffset,
               axis: .vertical,
               verticalBoundary: .init(min: 0, max: .infinity, bandLength: 50),

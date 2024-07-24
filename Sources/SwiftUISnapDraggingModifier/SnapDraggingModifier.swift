@@ -2,6 +2,47 @@ import RubberBanding
 import SwiftUI
 import SwiftUISupportSizing
 import SwiftUISupportGeometryEffect
+import SwiftUIScrollViewInteroperableDragGesture
+
+public protocol GestureMode {
+  
+}
+
+public struct GestureModeNormal: GestureMode {}
+
+public struct GestureModeHighPriority: GestureMode {}
+
+@available(iOS 18, *)
+public struct GestureModeScrollViewInteroperable: GestureMode {
+  
+  let configuration: ScrollViewInteroperableDragGesture.Configuration
+  
+  public init(configuration: ScrollViewInteroperableDragGesture.Configuration) {
+    self.configuration = configuration
+  }
+}
+
+extension GestureMode where Self == GestureModeNormal {
+  
+  public static var normal: Self {
+    .init()
+  }
+}
+
+extension GestureMode where Self == GestureModeHighPriority {
+  
+  public static var highPriority: Self {
+    .init()
+  }
+}
+
+@available(iOS 18, *)
+extension GestureMode where Self == GestureModeScrollViewInteroperable {
+  
+  public static func scrollViewInteroperable(_ configuration: ScrollViewInteroperableDragGesture.Configuration) -> Self {
+    .init(configuration: configuration)
+  }
+}
 
 public struct SnapDraggingModifier: ViewModifier {
   
@@ -58,11 +99,6 @@ public struct SnapDraggingModifier: ViewModifier {
       self.onEndDragging = onEndDragging
       self.onCompleteAnimation = onCompleteAnimation
     }
-  }
-  
-  public enum GestureMode {
-    case normal
-    case highPriority
   }
   
   public enum SpringParameter {
@@ -123,7 +159,7 @@ public struct SnapDraggingModifier: ViewModifier {
   
   public let axis: Axis.Set
   public let springParameter: SpringParameter
-  public let gestureMode: GestureMode
+  public let gestureMode: any GestureMode
   public let activation: Activation
   
   private let horizontalBoundary: Boundary
@@ -131,13 +167,13 @@ public struct SnapDraggingModifier: ViewModifier {
   private let handler: Handler
   
   public init(
+    gestureMode: any GestureMode,
     offset: Binding<CGSize>,
     activation: Activation = .init(),
     axis: Axis.Set = [.horizontal, .vertical],
     horizontalBoundary: Boundary = .infinity,
     verticalBoundary: Boundary = .infinity,
     springParameter: SpringParameter = .hard,
-    gestureMode: GestureMode = .normal,
     handler: Handler = .init()
   ) {
     self._currentOffset = offset
@@ -162,26 +198,23 @@ public struct SnapDraggingModifier: ViewModifier {
           self.onEnded(velocity: .zero)
         }
       }
-      .overlay { 
-        Text("\(presentingOffset.debugDescription)")
-      }
-    
-    let addingGesture = dragGesture.simultaneously(with: gesture)
-    
+
     if true, #available(iOS 18, *) {
       
       Group {
         switch gestureMode {
-        case .normal:
+        case let normal as GestureModeNormal:
           base
-            .gesture(_gesture)
-            .simultaneousGesture(gesture)
-//            .gesture(addingGesture, including: .all)
-        case .highPriority:
+            .gesture(dragGesture.simultaneously(with: gesture), including: .all)
+        case let highPriority as GestureModeHighPriority:
           base
-            .gesture(_gesture)
+            .highPriorityGesture(dragGesture.simultaneously(with: gesture), including: .all)
+        case let scrollViewInteroperable as GestureModeScrollViewInteroperable:
+          base
+            .gesture(_gesture(configuration: scrollViewInteroperable.configuration))
             .simultaneousGesture(gesture)
-//            .highPriorityGesture(addingGesture, including: .all)
+        default:
+          EmptyView()
         }
       }
       ._animatableOffset(x: currentOffset.width, presenting: $presentingOffset.width)
@@ -196,14 +229,18 @@ public struct SnapDraggingModifier: ViewModifier {
       
     } else {
       
+      let addingGesture = dragGesture.simultaneously(with: gesture)
+      
       Group {
         switch gestureMode {
-        case .normal:
+        case let normal as GestureModeNormal:
           base
             .gesture(addingGesture, including: .all)
-        case .highPriority:
+        case let highPriority as GestureModeHighPriority:
           base
             .highPriorityGesture(addingGesture, including: .all)
+        default:
+          EmptyView()
         }
       }
       ._animatableOffset(x: currentOffset.width, presenting: $presentingOffset.width)
@@ -307,11 +344,12 @@ public struct SnapDraggingModifier: ViewModifier {
   @available(tvOS, unavailable)
   @available(watchOS, unavailable)
   @available(visionOS, unavailable)
-  private var _gesture: some UIGestureRecognizerRepresentable {
+  private func _gesture(configuration: ScrollViewInteroperableDragGesture.Configuration) -> ScrollViewInteroperableDragGesture {
           
     let baseOffset = presentingOffset
     
-    return CustomGesture(
+    return ScrollViewInteroperableDragGesture(
+      configuration: configuration,
       coordinateSpaceInDragging: .named(_CoordinateSpaceTag.transition),
       onChange: { value in 
       
@@ -553,6 +591,7 @@ struct Joystick: View {
         .frame(width: 100, height: 100)
         .modifier(
           SnapDraggingModifier(
+            gestureMode: .normal,
             offset: $offset,
             activation: .init(minimumDistance: 0),
             springParameter: .interpolation(mass: 1, stiffness: 1, damping: 1)            
@@ -581,6 +620,7 @@ struct SwipeAction: View {
       .frame(width: nil, height: 50)
       .modifier(
         SnapDraggingModifier(
+          gestureMode: .normal,
           offset: $offset,
           axis: .horizontal,
           horizontalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
