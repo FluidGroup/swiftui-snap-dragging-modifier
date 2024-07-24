@@ -18,18 +18,16 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
         velocity: velocity
       )
     }
-
-    consuming func fixingLocation(_ offset: CGPoint) -> Value {
-
-      let subDistance = CGSize(width: offset.x - beganPoint.x, height: offset.y - beganPoint.y)
-
+    
+    consuming func swapTranslation(_ translation: CGSize) -> Value {
       return Value(
         beganPoint: beganPoint,
         translation: translation,
-        location: .init(x: location.x - subDistance.width, y: location.y - subDistance.height),
+        location: location,
         velocity: velocity
       )
     }
+   
   }
 
   struct Configuration {
@@ -44,6 +42,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
       var translationOffset: CGSize = .zero
       var currentScrollController: ScrollController?
       var trackingLocation: CGPoint = .zero
+      var translation: CGSize = .zero
     }
 
     var tracking: Tracking = .init()
@@ -153,25 +152,28 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
 
         let scrollableEdges = scrollView.scrollableEdges
 
-        let panDirection = recognizer.panDirection
+        let (panDirection, diff) = recognizer.panDirection
 
         if panDirection.contains(.up) {
+          
+          print("UP")
 
           if scrollableEdges.contains(.bottom) == false {
-            scrollController.lockScrolling(direction: .vertical)
-            if context.coordinator.tracking.trackingLocation == .zero {
-              context.coordinator.tracking.trackingLocation = value.location
-            }
+            scrollController.lockScrolling(direction: .vertical)           
             if context.coordinator.tracking.translationOffset == .zero {
               context.coordinator.tracking.translationOffset = value.translation
             }
             context.coordinator.tracking.isDragging = true
+            
+            context.coordinator.tracking.translation.height += diff.y
+            
             _onChange(
               value
-                .fixingLocation(context.coordinator.tracking.trackingLocation)
                 .applyTranslationOffset(context.coordinator.tracking.translationOffset)
+                .swapTranslation(context.coordinator.tracking.translation)
             )
           } else {
+            context.coordinator.tracking.translationOffset = .zero
             scrollController.unlockScrolling(direction: .vertical)
             context.coordinator.tracking.isDragging = false
           }
@@ -179,6 +181,9 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
         }
 
         if panDirection.contains(.down) {
+          
+          print("DOWN")
+          
           if scrollableEdges.contains(.top) == false {
             scrollController.lockScrolling(direction: .vertical)
             if context.coordinator.tracking.trackingLocation == .zero {
@@ -187,11 +192,14 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
             if context.coordinator.tracking.translationOffset == .zero {
               context.coordinator.tracking.translationOffset = value.translation
             }
+            
+            context.coordinator.tracking.translation.height += diff.y
+                        
             context.coordinator.tracking.isDragging = true
             _onChange(
               value
-                .fixingLocation(context.coordinator.tracking.trackingLocation)
                 .applyTranslationOffset(context.coordinator.tracking.translationOffset)
+                .swapTranslation(context.coordinator.tracking.translation)
             )
           } else {
             scrollController.unlockScrolling(direction: .vertical)
@@ -207,10 +215,13 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
               context.coordinator.tracking.translationOffset = value.translation
             }
             context.coordinator.tracking.isDragging = true
+            
+            context.coordinator.tracking.translation.width += diff.x
+            
             _onChange(
               value
-                .fixingLocation(context.coordinator.tracking.trackingLocation)
                 .applyTranslationOffset(context.coordinator.tracking.translationOffset)
+                .swapTranslation(context.coordinator.tracking.translation)
             )
           } else {
             scrollController.unlockScrolling(direction: .horizontal)
@@ -219,7 +230,7 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
           }
           
         }
-        
+
         if panDirection.contains(.right) {
           
           if scrollableEdges.contains(.left) == false {
@@ -228,10 +239,13 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
               context.coordinator.tracking.translationOffset = value.translation
             }
             context.coordinator.tracking.isDragging = true
+            
+            context.coordinator.tracking.translation.width += diff.x
+            
             _onChange(
               value
-                .fixingLocation(context.coordinator.tracking.trackingLocation)
                 .applyTranslationOffset(context.coordinator.tracking.translationOffset)
+                .swapTranslation(context.coordinator.tracking.translation)
             )
           } else {
             scrollController.unlockScrolling(direction: .horizontal)
@@ -262,7 +276,10 @@ struct CustomGesture: UIGestureRecognizerRepresentable {
         value.velocity = .zero
       }
 
-      _onEnd(value.fixingLocation(context.coordinator.tracking.trackingLocation))
+      _onEnd(
+        value
+          .applyTranslationOffset(context.coordinator.tracking.translationOffset)
+      )
 
       context.coordinator.purgeTrakingState()
 
@@ -287,33 +304,42 @@ final class ScrollViewDragGestureRecognizer: UIPanGestureRecognizer {
   }
 
   weak var trackingScrollView: UIScrollView?
+  
+  private var previousTranslation: CGPoint = .zero
 
   init() {
     super.init(target: nil, action: nil)
+      
   }
-
-  var panDirection: PanDirection {
+  
+  var panDirection: (PanDirection, diff: CGPoint) {
 
     let translation = self.translation(in: view)
+    
+    let diff = CGPoint(x: translation.x - previousTranslation.x, y: translation.y - previousTranslation.y)
+    
+    previousTranslation = translation
+            
     var direction: PanDirection = []
 
-    if translation.y > 0 {
+    if diff.y > 0 {
       direction.insert(.down)
-    } else if translation.y < 0 {
+    } else if diff.y < 0 {
       direction.insert(.up)
     }
 
-    if translation.x > 0 {
+    if diff.x > 0 {
       direction.insert(.right)
-    } else if translation.x < 0 {
+    } else if diff.x < 0 {
       direction.insert(.left)
     }
 
-    return direction
+    return (direction, diff)
   }
 
   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
     trackingScrollView = event.findVerticalScrollView()
+    previousTranslation = .zero
     super.touchesBegan(touches, with: event)
   }
 
