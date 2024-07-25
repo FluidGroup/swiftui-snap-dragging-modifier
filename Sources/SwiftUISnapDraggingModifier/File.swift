@@ -1,7 +1,89 @@
 import SwiftUI
 import SwiftUISupportSizing
+import os.log
 
-public struct BlanketModifier<DisplayContent: View>: ViewModifier {
+public struct BlancketDetent: Hashable {
+  
+  struct Context {
+    let maxDetentValue: CGFloat
+    let contentHeight: CGFloat
+  }
+  
+  enum Node: Hashable {
+    
+    case fraction(CGFloat)
+    case height(CGFloat)
+    case content    
+  }
+  
+  struct Resolved: Hashable {
+    
+    let source: BlancketDetent
+    let offset: CGFloat
+    
+  }
+  
+  let node: Node
+  
+  public static func height(_ height: CGFloat) -> Self {
+    .init(node: .height(height))
+  }
+  
+  public static func fraction(_ fraction: CGFloat) -> Self {
+    .init(node: .fraction(fraction))
+  }
+  
+  public static var content: Self {
+    .init(node: .content)
+  }
+      
+  func resolve(in context: Context) -> CGFloat {
+    switch node {
+    case .content:
+      return context.contentHeight
+    case .fraction(let fraction):
+      return context.maxDetentValue * fraction
+    case .height(let height):
+      return min(height, context.maxDetentValue)
+    }
+  }
+  
+}
+
+public struct BlanketConfiguration {
+  
+  public struct Inline {
+    
+    public init() {
+      
+    }
+  }
+  
+  public struct Presentation {
+    
+    public let backgroundColor: Color
+    
+    public init(
+      backgroundColor: Color
+    ) {
+      self.backgroundColor = backgroundColor
+    }
+  }
+  
+  public enum Mode {
+    case inline(Inline)
+    case presentation(Presentation)
+  }
+  
+  public let mode: Mode
+  
+  public init(mode: Mode) {
+    self.mode = mode
+  }
+  
+}
+
+public struct BlanketModifier<DisplayContent: View>: ViewModifier {    
 
   private let displayContent: () -> DisplayContent
   @Binding var isPresented: Bool
@@ -12,14 +94,18 @@ public struct BlanketModifier<DisplayContent: View>: ViewModifier {
   
   private let onDismiss: (() -> Void)?
 
-  private var hidingOffset: CGFloat {
-    (contentSize.height + safeAreaInsets.bottom)
-  }
+//  private var hidingOffset: CGFloat {
+//    (contentSize.height + safeAreaInsets.bottom)
+//  }
+  
+  @State var hidingOffset: CGFloat = 0
 
   private var animation: SnapDraggingModifier.SpringParameter {
     //    .interpolation(mass: 1, stiffness: 1, damping: 1)
     return .hard
   }
+  
+  private let detents: Set<BlancketDetent>
 
   public init(
     isPresented: Binding<Bool>,
@@ -29,6 +115,8 @@ public struct BlanketModifier<DisplayContent: View>: ViewModifier {
     self._isPresented = isPresented
     self.onDismiss = onDismiss
     self.displayContent = displayContent    
+    
+    self.detents = .init([.content, .fraction(0.8), .fraction(1)])
   }
 
   public func body(content: Content) -> some View {
@@ -40,65 +128,101 @@ public struct BlanketModifier<DisplayContent: View>: ViewModifier {
 
         ZStack {
           displayContent()
-            .onAppear(perform: {
-              print("appear")
-            })
         }
         .readingGeometry(
           transform: \.size,
           target: $contentSize
         )
         .fixedSize(horizontal: false, vertical: true)
-        .modifier(
-          SnapDraggingModifier(
-            gestureMode: {
-              if #available(iOS 18.0, *) {
-                return .scrollViewInteroperable(
-                  .init(ignoresScrollView: false, sticksToEdges: true)
-                )
-              } else {
-                return .normal
-              }
-            }(),
-            offset: $contentOffset,
-            axis: .vertical,
-            verticalBoundary: .init(min: 0, max: .infinity, bandLength: 50),
-            springParameter: animation,
-            handler: .init(
-              onEndDragging: { velocity, offset, contentSize in
-
-                print(velocity, offset)
-                if velocity.dy > 50 || offset.height > (contentSize.width / 2) {
-                  isPresented = false
-                  return .init(width: 0, height: hidingOffset)
-                } else {
-                  return .zero
-                }
-              })
-          )
-        )
-        .onChange(of: isPresented) { isPresented in
-          if isPresented {
-            withAnimation(.spring(response: 0.45)) {
-              contentOffset.height = 0
-            }
-          } else {
-            withAnimation(.spring(response: 0.45)) {
-              contentOffset.height = hidingOffset
-            }
-          }
-        }
-        .onChange(of: hidingOffset) { hidingOffset in
-          if isPresented == false {
-            self.contentOffset.height = hidingOffset
-          }
-        }
+            
       }
+
+      .contentShape(Rectangle())
+      
+      // make this draggable
+      .modifier(
+        SnapDraggingModifier(
+          gestureMode: {
+            if #available(iOS 18.0, *) {
+              return .scrollViewInteroperable(
+                .init(ignoresScrollView: false, sticksToEdges: true)
+              )
+            } else {
+              return .normal
+            }
+          }(),
+          offset: $contentOffset,
+          axis: .vertical,
+          verticalBoundary: .init(min: .infinity * -1, max: .infinity, bandLength: 50),
+          springParameter: animation,
+          handler: .init(
+            onEndDragging: { velocity, offset, contentSize in
+              
+              print(offset.height)
+              
+              if velocity.dy > 50 || offset.height > (contentSize.width / 2) {
+                isPresented = false
+                return .init(width: 0, height: hidingOffset)
+              } else {
+                return .zero
+              }
+            })
+        )
+      )
+      
+      .background(Color(white: 0, opacity: isPresented ? 0.2 : 0))
+      .animation(.smooth, value: isPresented)
       .readingGeometry(
         transform: \.safeAreaInsets,
         target: $safeAreaInsets
       )
+      .onChange(of: isPresented) { isPresented in
+        if isPresented {
+          withAnimation(.spring(response: 0.45)) {
+            contentOffset.height = 0
+          }
+        } else {
+          withAnimation(.spring(response: 0.45)) {
+            contentOffset.height = hidingOffset
+          }
+        }
+      }
+      .onChange(of: contentSize) { contentSize in                
+        resolve(contentSize: contentSize)
+      }
+      .onChange(of: hidingOffset) { hidingOffset in
+        if isPresented == false {
+          // init          
+          print("Init", hidingOffset)
+          self.contentOffset.height = hidingOffset
+        }
+      }
     }
+  }
+  
+  private func resolve(contentSize: CGSize) {
+    
+    let context = BlancketDetent.Context(
+      maxDetentValue: contentSize.height + safeAreaInsets.bottom,
+      contentHeight: contentSize.height
+    )
+    
+    let resolved = detents.map {
+      let height = $0.resolve(in: context)
+      return BlancketDetent.Resolved(
+        source: $0,
+        offset: $0.resolve(in: context)
+      )
+    }
+      .sorted(by: { $0.offset < $1.offset })
+    
+    let hiddenDetent = BlancketDetent.Resolved(
+      source: .fraction(0),
+      offset: (contentSize.height + safeAreaInsets.bottom)
+    )
+            
+    print(resolved.map { $0.offset }, hidingOffset)
+        
   }
 
 }
@@ -283,4 +407,22 @@ struct SheetContent: View {
 
 #endif
 
-
+@available(iOS 16.0, *)
+#Preview("Sheet") {
+  struct ContentView: View {
+    @State private var showSettings = false
+    
+    
+    var body: some View {
+      Button("View Settings") {
+        showSettings = true
+      }
+      .sheet(isPresented: $showSettings) {
+        SheetContent(title: "Standard")
+          .presentationDetents([.medium, .fraction(0.2), .large])
+      }
+    }
+  }
+  
+  return ContentView()
+}
