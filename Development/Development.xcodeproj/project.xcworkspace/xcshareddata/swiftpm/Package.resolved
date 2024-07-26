@@ -1,0 +1,24 @@
+{
+  "originHash" : "bf69f78dc379b70fc68829e1f8cba58518fbec4de48b39f78f417eb30a455bfa",
+  "pins" : [
+    {
+      "identity" : "swift-rubber-banding",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/FluidGroup/swift-rubber-banding",
+      "state" : {
+        "revision" : "f2dbd09829c6267db0a769e7c37fe332dab0b675",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "swiftui-support",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/FluidGroup/swiftui-support",
+      "state" : {
+        "revision" : "266e052494f8b7432374ad19a4bd31877cf54640",
+        "version" : "0.10.0"
+      }
+    }
+  ],
+  "version" : 3
+}

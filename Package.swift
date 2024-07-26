@@ -14,14 +14,17 @@ let package = Package(
   ],
   dependencies: [
     .package(url: "https://github.com/FluidGroup/swiftui-support", from: "0.9.0"),
-    .package(url: "https://github.com/FluidGroup/swift-rubber-banding", from: "1.0.0")
+    .package(url: "https://github.com/FluidGroup/swift-rubber-banding", from: "1.0.0"),
+    .package(url: "https://github.com/FluidGroup/swiftui-scrollview-interoperable-drag-gesture", from: "0.1.0")
   ],
   targets: [
     .target(
       name: "SwiftUISnapDraggingModifier",
       dependencies: [
         .product(name: "RubberBanding", package: "swift-rubber-banding"),
-        .product(name: "SwiftUISupport", package: "swiftui-support"),
+        .product(name: "SwiftUISupportSizing", package: "swiftui-support"),
+        .product(name: "SwiftUISupportGeometryEffect", package: "swiftui-support"),
+        .product(name: "SwiftUIScrollViewInteroperableDragGesture", package: "swiftui-scrollview-interoperable-drag-gesture"),
       ]
     ),
     .testTarget(

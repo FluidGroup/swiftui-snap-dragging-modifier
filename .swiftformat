@@ -1,0 +1,13 @@
+{
+  "maximumBlankLines" : 1,
+  "indentConditionalCompilationBlocks" : false,
+  "lineLength" : 100,
+  "rules" : {
+    "DoNotUseSemicolons" : false
+  },
+  "lineBreakBeforeEachGenericRequirement" : true,
+  "lineBreakBeforeEachArgument" : true,
+  "indentation" : {
+    "spaces" : 2
+  }
+}
