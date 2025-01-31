@@ -10,12 +10,21 @@
       }
     },
     {
+      "identity" : "swiftui-scrollview-interoperable-drag-gesture",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/FluidGroup/swiftui-scrollview-interoperable-drag-gesture",
+      "state" : {
+        "revision" : "60854a651c8224b3e08252cc5864c149d59a9739",
+        "version" : "0.2.0"
+      }
+    },
+    {
       "identity" : "swiftui-support",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/FluidGroup/swiftui-support",
       "state" : {
-        "revision" : "37c48a3d8ca92109aa8a5a8b476e247039dc2a54",
-        "version" : "0.6.0"
+        "revision" : "10b463fc241552c4c6668700c37d4112ae926fe5",
+        "version" : "0.12.0"
       }
     }
   ],
