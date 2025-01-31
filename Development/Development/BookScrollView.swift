@@ -45,7 +45,7 @@ private var scrollView: some View {
     .modifier(
       SnapDraggingModifier(
         gestureMode: .scrollViewInteroperable(
-          .init(ignoresScrollView: false, sticksToEdges: false)
+          .init(ignoresScrollView: false, targetEdges: [], sticksToEdges: false)
         ),
         offset: $offset
       )
@@ -72,7 +72,7 @@ private var scrollView: some View {
     .modifier(
       SnapDraggingModifier(
         gestureMode: .scrollViewInteroperable(
-          .init(ignoresScrollView: false, sticksToEdges: true)
+          .init(ignoresScrollView: false, targetEdges: .all, sticksToEdges: true)
         ),
         offset: $offset
       )
@@ -99,7 +99,7 @@ private var scrollView: some View {
     .modifier(
       SnapDraggingModifier(
         gestureMode: .scrollViewInteroperable(
-          .init(ignoresScrollView: true, sticksToEdges: true)
+          .init(ignoresScrollView: true, targetEdges: .all, sticksToEdges: true)
         ),
         offset: $offset
       )
