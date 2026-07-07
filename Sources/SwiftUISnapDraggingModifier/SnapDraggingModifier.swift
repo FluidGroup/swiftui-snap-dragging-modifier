@@ -12,6 +12,10 @@ public struct GestureModeNormal: GestureMode {}
 
 public struct GestureModeHighPriority: GestureMode {}
 
+/// A gesture mode that lets the drag gesture recognize alongside controls
+/// inside the modified view.
+public struct GestureModeSimultaneous: GestureMode {}
+
 @available(iOS 18, *)
 public struct GestureModeScrollViewInteroperable: GestureMode {
 
@@ -32,6 +36,13 @@ extension GestureMode where Self == GestureModeNormal {
 extension GestureMode where Self == GestureModeHighPriority {
 
   public static var highPriority: Self {
+    .init()
+  }
+}
+
+extension GestureMode where Self == GestureModeSimultaneous {
+
+  public static var simultaneous: Self {
     .init()
   }
 }
@@ -155,6 +166,7 @@ public struct SnapDraggingModifier: ViewModifier {
   @GestureState private var pointInView: CGPoint = .zero
 
   @State private var isActive = false
+  @State private var scrollViewInteroperableInitialOffset: CGSize?
   @State private var contentSize: CGSize = .zero
 
   @Environment(\.layoutDirection) var layoutDirection
@@ -195,23 +207,31 @@ public struct SnapDraggingModifier: ViewModifier {
       .coordinateSpace(name: _CoordinateSpaceTag.pointInView)
       .measureSize($contentSize)
       .onChange(of: isTracking) { newValue in
-        if isTracking == false, currentOffset != targetOffset {
+        guard newValue == false else {
+          return
+        }
+
+        if isActive, currentOffset != targetOffset {
           // For recovery of gesture unexpectedly canceled by the other gesture.
           // `onEnded` never get called in the case.
           self.onEnded(velocity: .zero)
         }
+        isActive = false
       }
 
-    if true, #available(iOS 18, *) {
+    if #available(iOS 18, *) {
 
       Group {
         switch gestureMode {
-        case let normal as GestureModeNormal:
+        case _ as GestureModeNormal:
           base
             .gesture(dragGesture.simultaneously(with: gesture), including: .all)
-        case let highPriority as GestureModeHighPriority:
+        case _ as GestureModeHighPriority:
           base
             .highPriorityGesture(dragGesture.simultaneously(with: gesture), including: .all)
+        case _ as GestureModeSimultaneous:
+          base
+            .simultaneousGesture(dragGesture.simultaneously(with: gesture), including: .all)
         case let scrollViewInteroperable as GestureModeScrollViewInteroperable:
           base
             .gesture(_gesture(configuration: scrollViewInteroperable.configuration))
@@ -236,12 +256,15 @@ public struct SnapDraggingModifier: ViewModifier {
 
       Group {
         switch gestureMode {
-        case let normal as GestureModeNormal:
+        case _ as GestureModeNormal:
           base
             .gesture(addingGesture, including: .all)
-        case let highPriority as GestureModeHighPriority:
+        case _ as GestureModeHighPriority:
           base
             .highPriorityGesture(addingGesture, including: .all)
+        case _ as GestureModeSimultaneous:
+          base
+            .simultaneousGesture(addingGesture, including: .all)
         default:
           EmptyView()
         }
@@ -351,8 +374,6 @@ public struct SnapDraggingModifier: ViewModifier {
     -> ScrollViewInteroperableDragGesture
   {
 
-    let baseOffset = presentingOffset
-
     return ScrollViewInteroperableDragGesture(
       configuration: configuration,
       coordinateSpaceInDragging: .named(_CoordinateSpaceTag.transition),
@@ -361,6 +382,13 @@ public struct SnapDraggingModifier: ViewModifier {
         //      if self.isActive || isInActivation(startLocation: value.startLocation) {
         //
         //        self.isActive = true
+
+        if scrollViewInteroperableInitialOffset == nil {
+          scrollViewInteroperableInitialOffset = presentingOffset
+          handler.onStartDragging()
+        }
+
+        let baseOffset = scrollViewInteroperableInitialOffset ?? presentingOffset
 
         let proposedOffset = CGSize(
           width: baseOffset.width + value.translation.width,
@@ -389,12 +417,15 @@ public struct SnapDraggingModifier: ViewModifier {
         //      }
       },
       onEnd: { value in
-        onEnded(
-          velocity: .init(
-            dx: value.velocity.width,
-            dy: value.velocity.height
+        if scrollViewInteroperableInitialOffset != nil {
+          onEnded(
+            velocity: .init(
+              dx: value.velocity.width,
+              dy: value.velocity.height
+            )
           )
-        )
+        }
+        scrollViewInteroperableInitialOffset = nil
       })
   }
 
@@ -492,8 +523,8 @@ public struct SnapDraggingModifier: ViewModifier {
     )
 
     let mappedVelocity = CGVector(
-      dx: velocity.dx / distance.width,
-      dy: velocity.dy / distance.height
+      dx: mappedInitialVelocity(velocity: velocity.dx, distance: distance.width),
+      dy: mappedInitialVelocity(velocity: velocity.dy, distance: distance.height)
     )
 
     var animationX: Animation {
@@ -555,6 +586,14 @@ public struct SnapDraggingModifier: ViewModifier {
       }
     }
 
+  }
+
+  private func mappedInitialVelocity(velocity: CGFloat, distance: CGFloat) -> CGFloat {
+    guard abs(distance) >= 1 else {
+      return 0
+    }
+
+    return velocity / distance
   }
 
 }
