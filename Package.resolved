@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/FluidGroup/swiftui-scrollview-interoperable-drag-gesture",
       "state" : {
-        "revision" : "60854a651c8224b3e08252cc5864c149d59a9739",
-        "version" : "0.2.0"
+        "revision" : "ee6daeca239c6cb180724f1c4bfad383f58eac22",
+        "version" : "0.5.0"
       }
     },
     {
