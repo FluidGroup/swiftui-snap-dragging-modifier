@@ -16,6 +16,16 @@ public struct GestureModeHighPriority: GestureMode {}
 /// inside the modified view.
 public struct GestureModeSimultaneous: GestureMode {}
 
+/// A UIKit-backed gesture mode that begins only when the dominant movement
+/// direction is compatible with ``SnapDraggingModifier/axis``.
+///
+/// UIKit decides when its pan recognizer begins. The modifier's
+/// ``SnapDraggingModifier/Activation/minimumDistance`` delays offset and
+/// callback delivery after that recognition boundary; it does not replace
+/// UIKit's intrinsic pan threshold.
+@available(iOS 18, *)
+public struct GestureModeDirectional: GestureMode {}
+
 @available(iOS 18, *)
 public struct GestureModeScrollViewInteroperable: GestureMode {
 
@@ -43,6 +53,16 @@ extension GestureMode where Self == GestureModeHighPriority {
 extension GestureMode where Self == GestureModeSimultaneous {
 
   public static var simultaneous: Self {
+    .init()
+  }
+}
+
+@available(iOS 18, *)
+extension GestureMode where Self == GestureModeDirectional {
+
+  /// Uses the modifier's existing `axis` for both gesture admission and offset
+  /// updates, keeping axis configuration in one place.
+  public static var directional: Self {
     .init()
   }
 }
@@ -93,7 +113,8 @@ public struct SnapDraggingModifier: ViewModifier {
 
     public init(
       onStartDragging: @escaping () -> Void = {},
-      onEndDragging: @escaping (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize)
+      onEndDragging:
+        @escaping (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize)
         -> CGSize = { _, _, _ in .zero }
     ) {
       self.onStartDragging = onStartDragging
@@ -104,7 +125,8 @@ public struct SnapDraggingModifier: ViewModifier {
     @available(iOS 17.0, *)
     public init(
       onStartDragging: @escaping () -> Void = {},
-      onEndDragging: @escaping (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize)
+      onEndDragging:
+        @escaping (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize)
         -> CGSize = { _, _, _ in .zero },
       onCompleteAnimation: @escaping () -> Void
     ) {
@@ -166,6 +188,7 @@ public struct SnapDraggingModifier: ViewModifier {
   @GestureState private var pointInView: CGPoint = .zero
 
   @State private var isActive = false
+  @State private var directionalInitialOffset: CGSize?
   @State private var scrollViewInteroperableInitialOffset: CGSize?
   @State private var contentSize: CGSize = .zero
 
@@ -232,6 +255,9 @@ public struct SnapDraggingModifier: ViewModifier {
         case _ as GestureModeSimultaneous:
           base
             .simultaneousGesture(dragGesture.simultaneously(with: gesture), including: .all)
+        case _ as GestureModeDirectional:
+          base
+            .gesture(directionalGesture)
         case let scrollViewInteroperable as GestureModeScrollViewInteroperable:
           base
             .gesture(_gesture(configuration: scrollViewInteroperable.configuration))
@@ -281,6 +307,44 @@ public struct SnapDraggingModifier: ViewModifier {
 
     }
 
+  }
+
+  @available(iOS 18.0, *)
+  @available(macOS, unavailable)
+  @available(tvOS, unavailable)
+  @available(watchOS, unavailable)
+  @available(visionOS, unavailable)
+  private var directionalGesture: DirectionalDragGesture {
+    DirectionalDragGesture(
+      axis: axis,
+      activation: activation,
+      contentSize: contentSize,
+      layoutDirection: layoutDirection,
+      onChange: { value in
+        if directionalInitialOffset == nil {
+          directionalInitialOffset = presentingOffset
+          handler.onStartDragging()
+        }
+
+        let baseOffset = directionalInitialOffset ?? presentingOffset
+        updateOffset(
+          baseOffset: baseOffset,
+          translation: value.translation
+        )
+      },
+      onEnd: { value in
+        if directionalInitialOffset != nil {
+          onEnded(velocity: value.velocity)
+        }
+        directionalInitialOffset = nil
+      },
+      onCancel: {
+        if directionalInitialOffset != nil {
+          resetToTargetOffset()
+        }
+        directionalInitialOffset = nil
+      }
+    )
   }
 
   private func isInActivation(startLocation: CGPoint) -> Bool {
@@ -390,30 +454,10 @@ public struct SnapDraggingModifier: ViewModifier {
 
         let baseOffset = scrollViewInteroperableInitialOffset ?? presentingOffset
 
-        let proposedOffset = CGSize(
-          width: baseOffset.width + value.translation.width,
-          height: baseOffset.height + value.translation.height
+        updateOffset(
+          baseOffset: baseOffset,
+          translation: value.translation
         )
-
-        // TODO: stop the current animation when dragging restarted.
-        withAnimation(.interactiveSpring()) {
-          if axis.contains(.horizontal) {
-            currentOffset.width = rubberBand(
-              value: proposedOffset.width,
-              min: horizontalBoundary.min,
-              max: horizontalBoundary.max,
-              bandLength: horizontalBoundary.bandLength
-            )
-          }
-          if axis.contains(.vertical) {
-            currentOffset.height = rubberBand(
-              value: proposedOffset.height,
-              min: verticalBoundary.min,
-              max: verticalBoundary.max,
-              bandLength: verticalBoundary.bandLength
-            )
-          }
-        }
         //      }
       },
       onEnd: { value in
@@ -460,30 +504,10 @@ public struct SnapDraggingModifier: ViewModifier {
         // Because of GestureState, this value is set always.
         let baseOffset = initialOffset!
 
-        let proposedOffset = CGSize(
-          width: baseOffset.width + value.translation.width,
-          height: baseOffset.height + value.translation.height
+        updateOffset(
+          baseOffset: baseOffset,
+          translation: value.translation
         )
-
-        // TODO: stop the current animation when dragging restarted.
-        withAnimation(.interactiveSpring()) {
-          if axis.contains(.horizontal) {
-            currentOffset.width = rubberBand(
-              value: proposedOffset.width,
-              min: horizontalBoundary.min,
-              max: horizontalBoundary.max,
-              bandLength: horizontalBoundary.bandLength
-            )
-          }
-          if axis.contains(.vertical) {
-            currentOffset.height = rubberBand(
-              value: proposedOffset.height,
-              min: verticalBoundary.min,
-              max: verticalBoundary.max,
-              bandLength: verticalBoundary.bandLength
-            )
-          }
-        }
       }
     })
     .onEnded({ value in
@@ -502,6 +526,54 @@ public struct SnapDraggingModifier: ViewModifier {
       self.isActive = false
     })
 
+  }
+
+  private func updateOffset(baseOffset: CGSize, translation: CGSize) {
+    let proposedOffset = CGSize(
+      width: baseOffset.width + translation.width,
+      height: baseOffset.height + translation.height
+    )
+
+    // Stop visually following an older target animation as soon as a new
+    // interactive drag supplies its own presentation value.
+    withAnimation(.interactiveSpring()) {
+      if axis.contains(.horizontal) {
+        currentOffset.width = rubberBand(
+          value: proposedOffset.width,
+          min: horizontalBoundary.min,
+          max: horizontalBoundary.max,
+          bandLength: horizontalBoundary.bandLength
+        )
+      }
+      if axis.contains(.vertical) {
+        currentOffset.height = rubberBand(
+          value: proposedOffset.height,
+          min: verticalBoundary.min,
+          max: verticalBoundary.max,
+          bandLength: verticalBoundary.bandLength
+        )
+      }
+    }
+  }
+
+  private func resetToTargetOffset() {
+    let targetOffset = self.targetOffset
+
+    let animation: Animation = {
+      switch springParameter {
+      case .interpolation(let mass, let stiffness, let damping):
+        return .interpolatingSpring(
+          mass: mass,
+          stiffness: stiffness,
+          damping: damping,
+          initialVelocity: 0
+        )
+      }
+    }()
+
+    withAnimation(animation) {
+      currentOffset = targetOffset
+    }
   }
 
   private func onEnded(velocity: CGVector) {

@@ -8,6 +8,31 @@ About Fluid interfaces : https://developer.apple.com/videos/play/wwdc2018/803/
 
 ## Examples
 
+### Directional gesture ownership
+
+Use `.directional` when a snap gesture should begin only after movement is
+dominant on the modifier's existing `axis`. For example, a horizontal action
+inside a vertical scrolling surface can reject vertical and equal-axis pans
+before the row gesture begins:
+
+```swift
+RoundedRectangle(cornerRadius: 16, style: .continuous)
+  .modifier(
+    SnapDraggingModifier(
+      gestureMode: .directional,
+      offset: $offset,
+      axis: [.horizontal],
+      horizontalBoundary: .init(min: -50, max: 0, bandLength: 50)
+    )
+  )
+```
+
+`.directional` is available on iOS 18 and later. It is separate from
+`.scrollViewInteroperable`, which coordinates edge handoff with a scroll view.
+UIKit owns the pan-recognition threshold; `activation.minimumDistance` delays
+offset and callback delivery after recognition rather than replacing that
+system threshold.
+
 **Throwing a ball**
 
 <img width=250 src="https://user-images.githubusercontent.com/1888355/236678103-a982706d-ea22-4773-9071-2246b855e353.gif" />
