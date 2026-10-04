@@ -1,5 +1,5 @@
 {
-  "originHash" : "bf69f78dc379b70fc68829e1f8cba58518fbec4de48b39f78f417eb30a455bfa",
+  "originHash" : "9f58f69a5cdd1391290e3a49a9b7c33cf1cea05deb85cc3ae4aef2866d9ae066",
   "pins" : [
     {
       "identity" : "swift-rubber-banding",
@@ -11,12 +11,12 @@
       }
     },
     {
-      "identity" : "swiftui-support",
+      "identity" : "swiftui-scrollview-interoperable-drag-gesture",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/FluidGroup/swiftui-support",
+      "location" : "https://github.com/FluidGroup/swiftui-scrollview-interoperable-drag-gesture",
       "state" : {
-        "revision" : "266e052494f8b7432374ad19a4bd31877cf54640",
-        "version" : "0.10.0"
+        "revision" : "ee6daeca239c6cb180724f1c4bfad383f58eac22",
+        "version" : "0.5.0"
       }
     }
   ],

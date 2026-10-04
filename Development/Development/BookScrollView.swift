@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import SwiftUIScrollViewInteroperableDragGesture
 import SwiftUISnapDraggingModifier
 
 #if DEBUG
@@ -47,7 +46,9 @@ private var scrollView: some View {
         gestureMode: .scrollViewInteroperable(
           .init(ignoresScrollView: false, targetEdges: [], sticksToEdges: false)
         ),
-        offset: $offset
+        offset: $offset,
+        horizontal: .infinity,
+        vertical: .infinity
       )
     )
     .background(Color.purple.tertiary)
@@ -74,7 +75,9 @@ private var scrollView: some View {
         gestureMode: .scrollViewInteroperable(
           .init(ignoresScrollView: false, targetEdges: .all, sticksToEdges: true)
         ),
-        offset: $offset
+        offset: $offset,
+        horizontal: .infinity,
+        vertical: .infinity
       )
     )
     .background(Color.purple.tertiary)
@@ -101,7 +104,9 @@ private var scrollView: some View {
         gestureMode: .scrollViewInteroperable(
           .init(ignoresScrollView: true, targetEdges: .all, sticksToEdges: true)
         ),
-        offset: $offset
+        offset: $offset,
+        horizontal: .infinity,
+        vertical: .infinity
       )
     )
     .background(Color.purple.tertiary)

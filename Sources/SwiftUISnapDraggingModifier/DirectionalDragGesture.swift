@@ -1,81 +1,55 @@
 import SwiftUI
 import UIKit
 
-/// A UIKit-backed pan gesture that begins only when movement is compatible
-/// with its configured axes.
+/// Admits a UIKit pan before recognition when the enabled axes match its intent.
 ///
-/// Axis admission happens before the recognizer enters `.began`, allowing an
-/// enclosing scroll view to keep a cross-axis pan without requiring explicit
-/// knowledge of that scroll view.
-@available(iOS 18.0, *)
+/// The recognizer rejects a cross-axis pan before it can cancel descendant
+/// controls. Translation and velocity use the stationary space outside the
+/// animated content; touch-down admission uses the content's local space.
+@MainActor
 struct DirectionalDragGesture: UIGestureRecognizerRepresentable {
 
-  struct Value {
-    let translation: CGSize
-    let velocity: CGVector
-  }
-
+  /// Owns one pan's admission, observable lifetime, and current callbacks.
   final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+    var gesture: DirectionalDragGesture
+    var converter: CoordinateSpaceConverter
+    var recognizer: UIPanGestureRecognizer?
+    private var session = SnapDraggingModifier.GestureSession()
+    private var lastValue = SnapDraggingModifier.GestureValue(translation: .zero, velocity: .zero)
+    private var pendingCancellation: (@MainActor () -> Void)?
 
-    var axis: Axis.Set
-    var activation: SnapDraggingModifier.Activation
-    var contentSize: CGSize
-    var layoutDirection: LayoutDirection
-
-    private let converter: CoordinateSpaceConverter
-    private var session = DirectionalDragGestureSession()
-
-    init(
-      axis: Axis.Set,
-      activation: SnapDraggingModifier.Activation,
-      contentSize: CGSize,
-      layoutDirection: LayoutDirection,
-      converter: CoordinateSpaceConverter
-    ) {
-      self.axis = axis
-      self.activation = activation
-      self.contentSize = contentSize
-      self.layoutDirection = layoutDirection
+    init(gesture: DirectionalDragGesture, converter: CoordinateSpaceConverter) {
+      self.gesture = gesture
       self.converter = converter
     }
 
+    deinit {
+      if let recognizer {
+        // SwiftUI exposes no representable teardown hook. Release UIKit's
+        // active pan on its actor without requiring actor-isolated deinit.
+        Task { @MainActor in recognizer.isEnabled = false }
+      }
+    }
+
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-      guard let panGestureRecognizer = gestureRecognizer as? UIPanGestureRecognizer else {
-        return false
-      }
+      guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+      let translation = convertVector(pan.translation(in: nil), to: .local)
+      let velocity = convertVector(pan.velocity(in: nil), to: .local)
+      guard SnapDraggingModifier.GestureAdmission.shouldBegin(
+        axis: gesture.axis, translation: translation, velocity: velocity
+      ) else { return false }
 
-      let translation =
-        converter.localTranslation
-        ?? {
-          panGestureRecognizer.translation(in: panGestureRecognizer.view)
-        }()
-      let velocity =
-        converter.localVelocity
-        ?? {
-          panGestureRecognizer.velocity(in: panGestureRecognizer.view)
-        }()
-
-      guard
-        DirectionalDragGestureAdmission.shouldBegin(
-          axis: axis,
-          translation: translation,
-          velocity: velocity
-        )
-      else {
-        return false
-      }
-
-      let location = converter.localLocation
-      let startLocation = CGPoint(
-        x: location.x - translation.x,
-        y: location.y - translation.y
+      let location = pan.location(in: nil)
+      let rawTranslation = pan.translation(in: nil)
+      let startLocation = converter.convert(
+        globalPoint: CGPoint(x: location.x - rawTranslation.x, y: location.y - rawTranslation.y),
+        to: .local
       )
-
-      return DirectionalDragGestureAdmission.shouldBegin(
+      return SnapDraggingModifier.GestureAdmission.shouldBegin(
         at: startLocation,
-        contentSize: contentSize,
-        region: activation.regionToActivate,
-        layoutDirection: layoutDirection
+        contentSize: gesture.contentSize,
+        region: gesture.activation.regionToActivate,
+        layoutDirection: gesture.layoutDirection
       )
     }
 
@@ -86,218 +60,160 @@ struct DirectionalDragGesture: UIGestureRecognizerRepresentable {
       otherGestureRecognizer is UIScreenEdgePanGestureRecognizer
     }
 
-    func shouldDeliverChange(translation: CGPoint) -> Bool {
-      guard
-        DirectionalDragGestureAdmission.hasReachedMinimumDistance(
-          translation: translation,
-          minimumDistance: activation.minimumDistance
-        )
-      else {
-        return false
+    func update(gesture: DirectionalDragGesture, converter: CoordinateSpaceConverter) {
+      let shouldCancel = self.gesture.axis != gesture.axis
+        || self.gesture.activation != gesture.activation
+        || self.gesture.layoutDirection != gesture.layoutDirection
+      if shouldCancel {
+        let action = session.consumeTerminalAction(for: .cancelled)
+        let value = lastValue
+        let onCancel = gesture.onCancel
+        recognizer?.isEnabled = false
+        if action != nil {
+          // Configuration updates run inside SwiftUI's view update. Deliver
+          // recovery on the next main turn instead of mutating State inline.
+          pendingCancellation = { onCancel(value) }
+          Task { @MainActor [weak self] in self?.deliverPendingCancellation() }
+        }
       }
-
-      session.recordDeliveredChange()
-      return true
+      self.gesture = gesture
+      self.converter = converter
+      recognizer?.isEnabled = !gesture.axis.isEmpty
     }
 
-    func consumeTerminalAction(
-      for state: UIGestureRecognizer.State
-    ) -> DirectionalDragGestureSession.TerminalAction? {
-      session.consumeTerminalAction(for: state)
+    /// Resumes a retained owner without relying on a new representable update.
+    func resumeGesture(enabled: Bool) {
+      recognizer?.isEnabled = enabled
+    }
+
+    /// Cancels immediately from the modifier's post-update/disappear callbacks.
+    func cancelActiveGesture(reenable: Bool) {
+      deliverPendingCancellation()
+      guard let recognizer,
+        session.hasDeliveredChange || recognizer.state == .began || recognizer.state == .changed
+      else { return }
+
+      let action = session.consumeTerminalAction(for: .cancelled)
+      let value = lastValue
+      recognizer.isEnabled = false
+      if action == .cancel {
+        gesture.onCancel(value)
+      }
+      recognizer.isEnabled = reenable
+    }
+
+    func handle(_ pan: UIPanGestureRecognizer, converter: CoordinateSpaceConverter) {
+      // Cancellation can arrive after SwiftUI destroys this view's coordinate
+      // namespace. Its last delivered value is sufficient to recover the snap;
+      // never ask the invalid converter to read removed geometry.
+      if pan.state == .cancelled || pan.state == .failed {
+        finish(state: pan.state, value: lastValue)
+        return
+      }
+      self.converter = converter
+      if pan.state == .began || pan.state == .changed {
+        // A new event can arrive before the deferred configuration callback.
+        // Finish the old observable drag before admitting this new sequence.
+        deliverPendingCancellation()
+      }
+      let translation = convertVector(
+        pan.translation(in: nil), to: gesture.coordinateSpaceInDragging
+      )
+      let velocity = convertVector(
+        pan.velocity(in: nil), to: gesture.coordinateSpaceInDragging
+      )
+      let value = SnapDraggingModifier.GestureValue(
+        translation: CGSize(width: translation.x, height: translation.y),
+        velocity: CGVector(dx: velocity.x, dy: velocity.y)
+      )
+      lastValue = value
+
+      switch pan.state {
+      case .began, .changed:
+        guard session.hasDeliveredChange
+          || SnapDraggingModifier.GestureAdmission.hasReachedMinimumDistance(
+            translation: translation, minimumDistance: gesture.activation.minimumDistance
+          ) else { return }
+        session.recordDeliveredChange()
+        gesture.onChange(value)
+      case .ended, .cancelled, .failed:
+        finish(state: pan.state, value: value)
+      case .possible:
+        break
+      @unknown default:
+        finish(state: .cancelled, value: value)
+      }
+    }
+
+    /// Converts displacement without introducing the coordinate space's origin.
+    private func convertVector(_ vector: CGPoint, to space: any CoordinateSpaceProtocol) -> CGPoint {
+      // On iOS 18, converter.translation/velocity can include a view-origin
+      // offset. Converting two points and subtracting preserves vector semantics
+      // for translated, scaled, and rotated SwiftUI coordinate spaces.
+      let origin = converter.convert(globalPoint: .zero, to: space)
+      let destination = converter.convert(globalPoint: vector, to: space)
+      return CGPoint(x: destination.x - origin.x, y: destination.y - origin.y)
+    }
+
+    private func finish(state: UIGestureRecognizer.State, value: SnapDraggingModifier.GestureValue) {
+      switch session.consumeTerminalAction(for: state) {
+      case .end:
+        gesture.onEnd(value)
+      case .cancel:
+        gesture.onCancel(value)
+      case nil:
+        break
+      }
+    }
+
+    private func deliverPendingCancellation() {
+      let callback = pendingCancellation
+      pendingCancellation = nil
+      callback?()
     }
   }
 
+  let control: SnapDraggingModifier.GestureControl
   let axis: Axis.Set
   let activation: SnapDraggingModifier.Activation
   let contentSize: CGSize
   let layoutDirection: LayoutDirection
-  let onChange: (Value) -> Void
-  let onEnd: (Value) -> Void
-  let onCancel: () -> Void
+  let coordinateSpaceInDragging: any CoordinateSpaceProtocol
+  let onChange: @MainActor (SnapDraggingModifier.GestureValue) -> Void
+  let onEnd: @MainActor (SnapDraggingModifier.GestureValue) -> Void
+  let onCancel: @MainActor (SnapDraggingModifier.GestureValue) -> Void
 
   func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
-    Coordinator(
-      axis: axis,
-      activation: activation,
-      contentSize: contentSize,
-      layoutDirection: layoutDirection,
-      converter: converter
+    let coordinator = Coordinator(gesture: self, converter: converter)
+    control.register(
+      owner: coordinator,
+      cancel: { [weak coordinator] reenable in
+        coordinator?.cancelActiveGesture(reenable: reenable)
+      },
+      resume: { [weak coordinator] enabled in
+        coordinator?.resumeGesture(enabled: enabled)
+      }
     )
+    return coordinator
   }
 
   func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
-    let gestureRecognizer = UIPanGestureRecognizer()
-    gestureRecognizer.maximumNumberOfTouches = 1
-    // Once a directional drag begins, descendant controls must not also commit
-    // their tap action. Vertical-dominant pans fail before this takes effect.
-    gestureRecognizer.cancelsTouchesInView = true
-    gestureRecognizer.delaysTouchesBegan = false
-    gestureRecognizer.delaysTouchesEnded = false
-    gestureRecognizer.delegate = context.coordinator
-    return gestureRecognizer
+    let recognizer = UIPanGestureRecognizer()
+    recognizer.maximumNumberOfTouches = 1
+    recognizer.cancelsTouchesInView = true
+    recognizer.delaysTouchesBegan = false
+    recognizer.delaysTouchesEnded = false
+    recognizer.delegate = context.coordinator
+    recognizer.isEnabled = !axis.isEmpty
+    context.coordinator.recognizer = recognizer
+    return recognizer
   }
 
-  func updateUIGestureRecognizer(_ gestureRecognizer: UIPanGestureRecognizer, context: Context) {
-    context.coordinator.axis = axis
-    context.coordinator.activation = activation
-    context.coordinator.contentSize = contentSize
-    context.coordinator.layoutDirection = layoutDirection
+  func updateUIGestureRecognizer(_ recognizer: UIPanGestureRecognizer, context: Context) {
+    context.coordinator.update(gesture: self, converter: context.converter)
   }
 
-  func handleUIGestureRecognizerAction(
-    _ gestureRecognizer: UIPanGestureRecognizer,
-    context: Context
-  ) {
-    let translation =
-      context.converter.localTranslation
-      ?? {
-        gestureRecognizer.translation(in: gestureRecognizer.view)
-      }()
-    let velocity =
-      context.converter.localVelocity
-      ?? {
-        gestureRecognizer.velocity(in: gestureRecognizer.view)
-      }()
-    let value = Value(
-      translation: CGSize(width: translation.x, height: translation.y),
-      velocity: CGVector(dx: velocity.x, dy: velocity.y)
-    )
-
-    let state = gestureRecognizer.state
-
-    switch state {
-    case .began, .changed:
-      if context.coordinator.shouldDeliverChange(translation: translation) {
-        onChange(value)
-      }
-    case .ended, .cancelled, .failed:
-      switch context.coordinator.consumeTerminalAction(for: state) {
-      case .end:
-        onEnd(value)
-      case .cancel:
-        onCancel()
-      case nil:
-        break
-      }
-    case .possible:
-      break
-    @unknown default:
-      if context.coordinator.consumeTerminalAction(for: state) == .cancel {
-        onCancel()
-      }
-    }
-  }
-}
-
-/// Tracks whether a directional drag has produced an observable change and
-/// consumes at most one terminal action for that drag.
-struct DirectionalDragGestureSession {
-
-  enum TerminalAction: Equatable {
-    case end
-    case cancel
-  }
-
-  private var hasDeliveredChange = false
-
-  mutating func recordDeliveredChange() {
-    hasDeliveredChange = true
-  }
-
-  mutating func consumeTerminalAction(
-    for state: UIGestureRecognizer.State
-  ) -> TerminalAction? {
-    let action: TerminalAction?
-
-    switch state {
-    case .ended:
-      action = .end
-    case .cancelled, .failed:
-      action = .cancel
-    case .possible, .began, .changed:
-      action = nil
-    @unknown default:
-      action = .cancel
-    }
-
-    guard hasDeliveredChange, let action else {
-      return nil
-    }
-
-    // Consume before invoking client code so re-entrant teardown cannot emit a
-    // second terminal callback for the same gesture.
-    hasDeliveredChange = false
-    return action
-  }
-}
-
-/// Pure dominant-axis admission used by the UIKit recognizer and unit tests.
-enum DirectionalDragGestureAdmission {
-
-  private static let edgeActivationWidth: CGFloat = 20
-
-  static func shouldBegin(
-    axis: Axis.Set,
-    translation: CGPoint,
-    velocity: CGPoint
-  ) -> Bool {
-    // Translation expresses the complete movement that led UIKit to ask
-    // whether this pan should begin. Instantaneous velocity can contain small
-    // sampling asymmetry even when the authored path is an equal diagonal.
-    let movement = translation == .zero ? velocity : translation
-    let horizontalMagnitude = abs(movement.x)
-    let verticalMagnitude = abs(movement.y)
-
-    switch (axis.contains(.horizontal), axis.contains(.vertical)) {
-    case (true, true):
-      return horizontalMagnitude > 0 || verticalMagnitude > 0
-    case (true, false):
-      return horizontalMagnitude > verticalMagnitude
-    case (false, true):
-      return verticalMagnitude > horizontalMagnitude
-    case (false, false):
-      return false
-    }
-  }
-
-  static func hasReachedMinimumDistance(
-    translation: CGPoint,
-    minimumDistance: Double
-  ) -> Bool {
-    hypot(translation.x, translation.y) >= max(0, minimumDistance)
-  }
-
-  static func shouldBegin(
-    at startLocation: CGPoint,
-    contentSize: CGSize,
-    region: SnapDraggingModifier.Activation.Region,
-    layoutDirection: LayoutDirection
-  ) -> Bool {
-    switch region {
-    case .screen:
-      return true
-    case .edge(let edges):
-      if edges.contains(.top), startLocation.y <= edgeActivationWidth {
-        return true
-      }
-
-      if edges.contains(.bottom), startLocation.y >= contentSize.height - edgeActivationWidth {
-        return true
-      }
-
-      let isNearLeftEdge = startLocation.x <= edgeActivationWidth
-      let isNearRightEdge = startLocation.x >= contentSize.width - edgeActivationWidth
-
-      switch layoutDirection {
-      case .leftToRight:
-        return (edges.contains(.leading) && isNearLeftEdge)
-          || (edges.contains(.trailing) && isNearRightEdge)
-      case .rightToLeft:
-        return (edges.contains(.leading) && isNearRightEdge)
-          || (edges.contains(.trailing) && isNearLeftEdge)
-      @unknown default:
-        return false
-      }
-    }
+  func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
+    context.coordinator.handle(recognizer, converter: context.converter)
   }
 }
