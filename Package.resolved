@@ -17,15 +17,6 @@
         "revision" : "ee6daeca239c6cb180724f1c4bfad383f58eac22",
         "version" : "0.5.0"
       }
-    },
-    {
-      "identity" : "swiftui-support",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/FluidGroup/swiftui-support",
-      "state" : {
-        "revision" : "10b463fc241552c4c6668700c37d4112ae926fe5",
-        "version" : "0.12.0"
-      }
     }
   ],
   "version" : 2
