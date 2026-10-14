@@ -3,6 +3,7 @@ import SwiftUI
 import SwiftUIScrollViewInteroperableDragGesture
 import SwiftUISupportGeometryEffect
 import SwiftUISupportSizing
+import UIKit
 
 public protocol GestureMode {
 
@@ -24,7 +25,52 @@ public struct GestureModeSimultaneous: GestureMode {}
 /// callback delivery after that recognition boundary; it does not replace
 /// UIKit's intrinsic pan threshold.
 @available(iOS 18, *)
-public struct GestureModeDirectional: GestureMode {}
+public struct GestureModeDirectional: GestureMode {
+
+  /// The movement and recognizer considered before a directional pan begins.
+  ///
+  /// The original touch location uses the modified view's local space. The
+  /// default SwiftUI installation also uses local translation and velocity;
+  /// an explicit UIKit attachment uses window movement so moving the host does
+  /// not alter the gesture delta. Velocity is measured in points per second.
+  public struct Admission {
+    /// The movement accumulated before recognition, in local points.
+    public let translation: CGPoint
+    /// The original touch location, before applying the translation.
+    public let startLocation: CGPoint
+    /// The current physical movement rate, in local points per second.
+    public let velocity: CGVector
+    /// The package-owned recognizer whose delegate remains under package control.
+    public let gestureRecognizer: UIPanGestureRecognizer
+  }
+
+  let isEnabled: Bool
+  let attachmentView: (@MainActor () -> UIView?)?
+  let shouldBegin: @MainActor (Admission) -> Bool
+  let onRecognizer: @MainActor (UIPanGestureRecognizer) -> Void
+
+  /// Creates a directional gesture with optional caller-owned admission rules.
+  /// - Parameters:
+  ///   - isEnabled: Whether the recognizer may process a touch sequence.
+  ///   - attachmentView: An optional component-owned UIKit host. Supplying this
+  ///     eagerly installs the package recognizer before the first touch, rather
+  ///     than allowing SwiftUI to create it lazily. Do not return an ancestor
+  ///     scroll view or navigation view shared with other components.
+  ///   - shouldBegin: An additional check after axis and activation admission.
+  ///   - onRecognizer: Called on creation and update. Configure public failure
+  ///     relationships here while preserving the package's recognizer delegate.
+  public init(
+    isEnabled: Bool = true,
+    attachmentView: (@MainActor () -> UIView?)? = nil,
+    shouldBegin: @escaping @MainActor (Admission) -> Bool = { _ in true },
+    onRecognizer: @escaping @MainActor (UIPanGestureRecognizer) -> Void = { _ in }
+  ) {
+    self.isEnabled = isEnabled
+    self.attachmentView = attachmentView
+    self.shouldBegin = shouldBegin
+    self.onRecognizer = onRecognizer
+  }
+}
 
 @available(iOS 18, *)
 public struct GestureModeScrollViewInteroperable: GestureMode {
@@ -64,6 +110,19 @@ extension GestureMode where Self == GestureModeDirectional {
   /// updates, keeping axis configuration in one place.
   public static var directional: Self {
     .init()
+  }
+
+  /// Adds admission and recognizer-configuration hooks to directional mode.
+  public static func directional(
+    isEnabled: Bool = true,
+    attachmentView: (@MainActor () -> UIView?)? = nil,
+    shouldBegin: @escaping @MainActor (GestureModeDirectional.Admission) -> Bool = { _ in true },
+    onRecognizer: @escaping @MainActor (UIPanGestureRecognizer) -> Void = { _ in }
+  ) -> Self {
+    .init(
+      isEnabled: isEnabled, attachmentView: attachmentView,
+      shouldBegin: shouldBegin, onRecognizer: onRecognizer
+    )
   }
 }
 
@@ -107,21 +166,63 @@ public struct SnapDraggingModifier: ViewModifier {
     public var onEndDragging:
       (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize) -> CGSize
 
+    /// An optional end callback that also receives the current drawing offset.
+    ///
+    /// The model offset is the most recently requested, rubber-banded offset.
+    /// The presenting offset is the latest value evaluated by the modifier's
+    /// geometry effect and can differ while an interactive spring is running.
+    /// This callback takes precedence over ``onEndDragging`` when supplied.
+    /// Velocity uses points per second and remains mutable for spring control.
+    public var onEndDraggingWithPresentation:
+      ((_ velocity: inout CGVector, _ offset: CGSize, _ presentingOffset: CGSize,
+        _ contentSize: CGSize) -> CGSize)?
+
+    /// Observes the latest drawing offset evaluated by the geometry effect.
+    ///
+    /// Main-thread evaluation delivers synchronously during rendering;
+    /// background evaluation forwards its notification onto main. Update plain
+    /// rendering metadata here, rather than SwiftUI state during layout. The
+    /// drawing offset is distinct from the model binding and supports external
+    /// rendering references whose UIKit frames omit SwiftUI geometry effects.
+    public var onPresentingOffsetChange: (CGSize) -> Void
+
     public var onStartDragging: () -> Void
 
     fileprivate var onCompleteAnimation: () -> Void
 
+    /// Preserves the original release initializer, including trailing-closure calls.
     public init(
       onStartDragging: @escaping () -> Void = {},
       onEndDragging:
         @escaping (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize)
         -> CGSize = { _, _, _ in .zero }
     ) {
+      self.init(
+        onStartDragging: onStartDragging,
+        onEndDragging: onEndDragging,
+        onEndDraggingWithPresentation: nil,
+        onPresentingOffsetChange: { _ in }
+      )
+    }
+
+    public init(
+      onStartDragging: @escaping () -> Void = {},
+      onEndDragging:
+        @escaping (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize)
+        -> CGSize = { _, _, _ in .zero },
+      onEndDraggingWithPresentation:
+        ((_ velocity: inout CGVector, _ offset: CGSize, _ presentingOffset: CGSize,
+          _ contentSize: CGSize) -> CGSize)? = nil,
+      onPresentingOffsetChange: @escaping (CGSize) -> Void = { _ in }
+    ) {
       self.onStartDragging = onStartDragging
       self.onEndDragging = onEndDragging
+      self.onEndDraggingWithPresentation = onEndDraggingWithPresentation
+      self.onPresentingOffsetChange = onPresentingOffsetChange
       self.onCompleteAnimation = {}
     }
 
+    /// Preserves the original release-and-completion initializer.
     @available(iOS 17.0, *)
     public init(
       onStartDragging: @escaping () -> Void = {},
@@ -130,9 +231,45 @@ public struct SnapDraggingModifier: ViewModifier {
         -> CGSize = { _, _, _ in .zero },
       onCompleteAnimation: @escaping () -> Void
     ) {
+      self.init(
+        onStartDragging: onStartDragging,
+        onEndDragging: onEndDragging,
+        onEndDraggingWithPresentation: nil,
+        onPresentingOffsetChange: { _ in },
+        onCompleteAnimation: onCompleteAnimation
+      )
+    }
+
+    @available(iOS 17.0, *)
+    public init(
+      onStartDragging: @escaping () -> Void = {},
+      onEndDragging:
+        @escaping (_ velocity: inout CGVector, _ offset: CGSize, _ contentSize: CGSize)
+        -> CGSize = { _, _, _ in .zero },
+      onEndDraggingWithPresentation:
+        ((_ velocity: inout CGVector, _ offset: CGSize, _ presentingOffset: CGSize,
+          _ contentSize: CGSize) -> CGSize)? = nil,
+      onPresentingOffsetChange: @escaping (CGSize) -> Void = { _ in },
+      onCompleteAnimation: @escaping () -> Void
+    ) {
       self.onStartDragging = onStartDragging
       self.onEndDragging = onEndDragging
+      self.onEndDraggingWithPresentation = onEndDraggingWithPresentation
+      self.onPresentingOffsetChange = onPresentingOffsetChange
       self.onCompleteAnimation = onCompleteAnimation
+    }
+
+    /// Resolves one release callback while preserving mutable velocity output.
+    func targetOffset(
+      velocity: inout CGVector,
+      offset: CGSize,
+      presentingOffset: CGSize,
+      contentSize: CGSize
+    ) -> CGSize {
+      if let onEndDraggingWithPresentation {
+        return onEndDraggingWithPresentation(&velocity, offset, presentingOffset, contentSize)
+      }
+      return onEndDragging(&velocity, offset, contentSize)
     }
   }
 
@@ -181,6 +318,10 @@ public struct SnapDraggingModifier: ViewModifier {
   // value for animating
   @State private var presentingOffset: CGSize = .zero
 
+  // Reference storage is deliberately not Observable: recording actual render
+  // geometry must not invalidate SwiftUI while it evaluates a geometry effect.
+  @State private var renderedOffsetTracker = RenderedOffsetTracker()
+
   @State private var targetOffset: CGSize = .zero
 
   @GestureState private var initialOffset: CGSize?
@@ -203,6 +344,16 @@ public struct SnapDraggingModifier: ViewModifier {
   private let verticalBoundary: Boundary
   private let handler: Handler
 
+  /// An explicit recovery position for a cancelled gesture.
+  ///
+  /// A caller can reset an accepted handoff's public offset while preserving
+  /// the rendering view. Supplying its resting position prevents a later
+  /// cancellation from restoring the previous handoff's private target.
+  private let cancelTargetOffset: CGSize?
+
+  /// Creates a modifier that tracks movement and springs to the handler's target.
+  /// - Parameter cancelTargetOffset: An optional resting offset for cancellation
+  ///   in directional mode. `nil` preserves recovery to the last handler target.
   public init(
     gestureMode: any GestureMode,
     offset: Binding<CGSize>,
@@ -211,6 +362,7 @@ public struct SnapDraggingModifier: ViewModifier {
     horizontalBoundary: Boundary = .infinity,
     verticalBoundary: Boundary = .infinity,
     springParameter: SpringParameter = .hard,
+    cancelTargetOffset: CGSize? = nil,
     handler: Handler = .init()
   ) {
     self._currentOffset = offset
@@ -221,6 +373,7 @@ public struct SnapDraggingModifier: ViewModifier {
     self.gestureMode = gestureMode
     self.handler = handler
     self.activation = activation
+    self.cancelTargetOffset = cancelTargetOffset
   }
 
   public func body(content: Content) -> some View {
@@ -255,9 +408,16 @@ public struct SnapDraggingModifier: ViewModifier {
         case _ as GestureModeSimultaneous:
           base
             .simultaneousGesture(dragGesture.simultaneously(with: gesture), including: .all)
-        case _ as GestureModeDirectional:
-          base
-            .gesture(directionalGesture)
+        case let directional as GestureModeDirectional:
+          if directional.attachmentView != nil {
+            base.background(
+              EagerDirectionalGestureInstallation(gesture: directionalGesture(configuration: directional))
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
+            )
+          } else {
+            base.gesture(directionalGesture(configuration: directional))
+          }
         case let scrollViewInteroperable as GestureModeScrollViewInteroperable:
           base
             .gesture(_gesture(configuration: scrollViewInteroperable.configuration))
@@ -266,8 +426,16 @@ public struct SnapDraggingModifier: ViewModifier {
           EmptyView()
         }
       }
-      ._animatableOffset(x: currentOffset.width, presenting: $presentingOffset.width)
-      ._animatableOffset(y: currentOffset.height, presenting: $presentingOffset.height)
+      ._animatableOffset(
+        x: currentOffset.width, presenting: $presentingOffset.width,
+        renderingTracker: renderedOffsetTracker,
+        onPresentingOffsetChange: handler.onPresentingOffsetChange
+      )
+      ._animatableOffset(
+        y: currentOffset.height, presenting: $presentingOffset.height,
+        renderingTracker: renderedOffsetTracker,
+        onPresentingOffsetChange: handler.onPresentingOffsetChange
+      )
 
       .coordinateSpace(name: _CoordinateSpaceTag.transition)
       .onChange(of: isTracking) { newValue in
@@ -295,8 +463,16 @@ public struct SnapDraggingModifier: ViewModifier {
           EmptyView()
         }
       }
-      ._animatableOffset(x: currentOffset.width, presenting: $presentingOffset.width)
-      ._animatableOffset(y: currentOffset.height, presenting: $presentingOffset.height)
+      ._animatableOffset(
+        x: currentOffset.width, presenting: $presentingOffset.width,
+        renderingTracker: renderedOffsetTracker,
+        onPresentingOffsetChange: handler.onPresentingOffsetChange
+      )
+      ._animatableOffset(
+        y: currentOffset.height, presenting: $presentingOffset.height,
+        renderingTracker: renderedOffsetTracker,
+        onPresentingOffsetChange: handler.onPresentingOffsetChange
+      )
 
       .coordinateSpace(name: _CoordinateSpaceTag.transition)
       .onChange(of: isTracking) { newValue in
@@ -314,19 +490,20 @@ public struct SnapDraggingModifier: ViewModifier {
   @available(tvOS, unavailable)
   @available(watchOS, unavailable)
   @available(visionOS, unavailable)
-  private var directionalGesture: DirectionalDragGesture {
+  private func directionalGesture(configuration: GestureModeDirectional) -> DirectionalDragGesture {
     DirectionalDragGesture(
       axis: axis,
       activation: activation,
       contentSize: contentSize,
       layoutDirection: layoutDirection,
+      configuration: configuration,
       onChange: { value in
         if directionalInitialOffset == nil {
-          directionalInitialOffset = presentingOffset
+          directionalInitialOffset = renderedOffsetTracker.offset
           handler.onStartDragging()
         }
 
-        let baseOffset = directionalInitialOffset ?? presentingOffset
+        let baseOffset = directionalInitialOffset ?? renderedOffsetTracker.offset
         updateOffset(
           baseOffset: baseOffset,
           translation: value.translation
@@ -557,7 +734,11 @@ public struct SnapDraggingModifier: ViewModifier {
   }
 
   private func resetToTargetOffset() {
-    let targetOffset = self.targetOffset
+    let targetOffset = SnapDraggingCancellation.target(
+      lastTarget: self.targetOffset,
+      explicitTarget: cancelTargetOffset
+    )
+    self.targetOffset = targetOffset
 
     let animation: Animation = {
       switch springParameter {
@@ -579,10 +760,11 @@ public struct SnapDraggingModifier: ViewModifier {
   private func onEnded(velocity: CGVector) {
     var usingVelocity = velocity
 
-    let targetOffset: CGSize = handler.onEndDragging(
-      &usingVelocity,
-      self.currentOffset,
-      self.contentSize
+    let targetOffset = handler.targetOffset(
+      velocity: &usingVelocity,
+      offset: currentOffset,
+      presentingOffset: renderedOffsetTracker.offset,
+      contentSize: contentSize
     )
 
     self.targetOffset = targetOffset
@@ -668,6 +850,13 @@ public struct SnapDraggingModifier: ViewModifier {
     return velocity / distance
   }
 
+}
+
+/// Resolves cancellation after an external offset reset without discarding view identity.
+enum SnapDraggingCancellation {
+  static func target(lastTarget: CGSize, explicitTarget: CGSize?) -> CGSize {
+    explicitTarget ?? lastTarget
+  }
 }
 
 private enum _CoordinateSpaceTag: Hashable {
